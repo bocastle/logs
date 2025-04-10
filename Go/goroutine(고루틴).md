@@ -8,4 +8,22 @@
 
 모든 프로그램은 적어도 하나의 main함수라는 고루틴을 포함하고 고루틴은 항상 백그라운드에서 작동합니다.
 
-메인 함수가 종료되면 모든 고루틴은 종료됩니다. 따라서 고루틴보다 main이 먼저 종료되는 것을 방지해야 합니다.
+메인 함수가 종료되면 모든 고루틴은 종료됩니다. 따라서 고루틴보다 main이 먼저 종료되는 것을 방지해야 합니다
+
+
+
+```go
+package model
+
+type ReqSampleDetail struct {
+	SampleNo int `form:"sample_no"`
+}
+
+type SampleDetail struct {
+	No           int    `json:"no"`
+	DummyTitle   string `json:"dummy_title"`
+	DummyContent string `json:"dummy_content"`
+	ViewCount    int    `json:"view_count"`
+}
+
+```
