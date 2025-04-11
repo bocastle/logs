@@ -1,12 +1,16 @@
 {
   "recentFiles": [
     {
-      "basename": "goroutine(고루틴)",
-      "path": "Go/goroutine(고루틴).md"
+      "basename": "자바스크립트 함수 정의(Function Definition) vs 실행(Function Call)",
+      "path": "JavaScript/자바스크립트 함수 정의(Function Definition) vs 실행(Function Call).md"
     },
     {
       "basename": "README",
       "path": "README.md"
+    },
+    {
+      "basename": "goroutine(고루틴)",
+      "path": "Go/goroutine(고루틴).md"
     }
   ],
   "omittedPaths": [],
