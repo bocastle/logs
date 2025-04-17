@@ -1,12 +1,12 @@
 {
   "recentFiles": [
     {
-      "basename": "README",
-      "path": "README.md"
-    },
-    {
       "basename": "리액트의 render phase와 commit phase에 대해서 설명해주세요.",
       "path": "프론트 면접준비/리액트의 render phase와 commit phase에 대해서 설명해주세요..md"
+    },
+    {
+      "basename": "README",
+      "path": "README.md"
     },
     {
       "basename": "리액트의 Strict Mode에 대해서 설명해주세요.",
