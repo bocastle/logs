@@ -2,10 +2,10 @@ name: Sync Markdown from Dropbox
 
 on:
   schedule:
-    - cron: "0 9 * * *" # 매일 오전 9시 (UTC 기준)
-    - cron: "0 11 * * *" # 오전 11시
-    - cron: "0 13 * * *" # 오후 1시
-  workflow_dispatch: # 수동 실행도 가능하게
+    - cron: "0 0 * * *" # 한국시간 오전 9시
+    - cron: "0 2 * * *" # 한국시간 오전 11시
+    - cron: "0 4 * * *" # 한국시간 오후 1시
+  workflow_dispatch:
 
 jobs:
   sync-md-file:
@@ -20,19 +20,49 @@ jobs:
           git config --global user.name "김보성"
           git config --global user.email "bocastle1213@gmail.com"
 
+      - name: Calculate today's date and hour
+        id: time
+        run: |
+          echo "date=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
+          echo "hour=$(date +'%H')" >> $GITHUB_ENV
+
       - name: Download Markdown file from Dropbox
         env:
           DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+          DATE: ${{ env.date }}
+          HOUR: ${{ env.hour }}
         run: |
-          curl -X POST https://content.dropboxapi.com/2/files/download \
+          # Dropbox에서 파일 목록 가져오기
+          FILE_LIST=$(curl -X POST https://api.dropboxapi.com/2/files/list_folder \
             --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-            --header "Dropbox-API-Arg: {\"path\": \"/Apps/myapp/auto.md\"}" \
-            --output auto.md
+            --header "Content-Type: application/json" \
+            --data "{\"path\": \"/Apps/bocelog/$DATE\"}" | jq -r '.entries[].name')
 
-      - name: Commit and Push if Changed
+          # 파일명 규칙에 맞는 파일 찾기 (예: JavaScript_약수의 개수 구하기_2025_04_26_09.md)
+          for FILE in $FILE_LIST; do
+            if [[ $FILE =~ ^.*_${DATE}_${HOUR}.md$ ]]; then
+              echo "Found file: $FILE"
+              curl -X POST https://content.dropboxapi.com/2/files/download \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                --header "Dropbox-API-Arg: {\"path\": \"/Apps/bocelog/$DATE/$FILE\"}" \
+                --output temp.md
+              break
+            fi
+          done
+
+      - name: Commit and Push if file exists
         run: |
-          mkdir -p contents
-          mv auto.md contents/
-          git add contents/auto.md
-          git commit -m "Auto-sync from Dropbox" || echo "No changes to commit"
-          git push origin main
+          if [ -f temp.md ]; then
+            # 동적으로 카테고리와 제목 추출
+            CATEGORY=$(echo $FILE | cut -d'_' -f1)   # 예시: 카테고리 추출 (JavaScript)
+            TITLE=$(echo $FILE | cut -d'_' -f2-)    # 예시: 제목 추출 (약수의 개수 구하기)
+            
+            # 폴더 구조에 맞춰서 파일을 이동
+            mkdir -p $CATEGORY
+            mv temp.md $CATEGORY/$TITLE.md
+            git add $CATEGORY/$TITLE.md
+            git commit -m "Auto-sync: $TITLE.md" || echo "No changes to commit"
+            git push origin main
+          else
+            echo "No file downloaded, skipping commit."
+          fi
