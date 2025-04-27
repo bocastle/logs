@@ -20,10 +20,6 @@ jobs:
           git config --global user.name "김보성"
           git config --global user.email "bocastle1213@gmail.com"
 
-      - name: Calculate today's date and hour
-        id: time
-        run: |
-          echo "DATE=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
       - name: Set up Dropbox API call
         run: |
           curl -X POST https://api.dropboxapi.com/2/files/list_folder \
@@ -32,82 +28,11 @@ jobs:
             --data '{"path": "/Apps"}' \
             -o response.json
 
-      - name: Check the API response
-        run: |
-          cat response.json  # 이 부분을 추가하여 응답 내용을 확인
-
       - name: Check if bocelog folder exists
         run: |
           if jq -e '.entries[] | select(.name == "bocelog")' response.json > /dev/null; then
             echo "bocelog folder exists!"
           else
             echo "bocelog folder does not exist."
-            exit 1  # 폴더가 없으면 오류를 반환
-          fi
-
-      - name: Download Markdown file from Dropbox
-        env:
-          DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
-          DATE: ${{ env.date }}
-
-        run: |
-          echo "Checking Dropbox for /Apps/bocelog/$DATE"
-           response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
-            --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-            --header "Content-Type: application/json" \
-            --data "{\"path\": \"/모든파일/앱/bocelog/$DATE\"}")
-
-          echo "API Response: $response"
-            if [ "$response" != "null" ] && [ ! -z "$response" ]; then
-              FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
-              echo "Files found: $FILE_LIST"
-            else
-              echo "No files found or API error."
-              exit 0
-            fi
-
-          # Dropbox에서 해당 날짜 파일 목록 가져오기
-            FILE_LIST=$(curl -X POST https://api.dropboxapi.com/2/files/list_folder \
-          --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-          --header "Content-Type: application/json" \
-          --data "{\"path\": \"/Apps/bocelog/$DATE\"}" | jq -r '.entries[].name')
-
-          # 파일 목록을 순회하며 조건에 맞는 파일 찾기
-            for FILE in $FILE_LIST; do
-              if [[ $FILE =~ ^JavaScript_.*_${DATE}_.+\.md$ ]]; then
-                echo "Found file: $FILE"
-                # Dropbox에서 파일 다운로드
-                curl -X POST https://content.dropboxapi.com/2/files/download \
-                  --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-                  --header "Dropbox-API-Arg: {\"path\": \"/모든파일/앱/bocelog/$DATE/$FILE\"}" \
-                  --output temp.md
-
-                # 카테고리와 제목 추출 (파일명으로부터)
-                CATEGORY=$(echo $FILE | cut -d'_' -f1)
-                TITLE=$(echo $FILE | cut -d'_' -f2- | sed 's/.md//')
-
-                # 폴더에 파일을 이동시키고 Git에 추가
-                if [ -f temp.md ]; then
-                  mkdir -p $CATEGORY
-                  mv temp.md $CATEGORY/$TITLE.md
-                  git add $CATEGORY/$TITLE.md
-                fi
-              fi
-            done
-
-      - name: Commit and Push if file exists
-        run: |
-          if [ -f temp.md ]; then
-            # 동적으로 카테고리와 제목 추출
-            CATEGORY=$(echo $FILE | cut -d'_' -f1)   # 파일명에서 카테고리 추출 (예: JavaScript)
-            TITLE=$(echo $FILE | cut -d'_' -f2-)    # 파일명에서 제목 추출 (예: 약수의 개수 구하기)
-            
-            # 폴더 구조에 맞춰서 파일을 이동
-            mkdir -p $CATEGORY
-            mv temp.md $CATEGORY/$TITLE.md
-            git add $CATEGORY/$TITLE.md
-            git commit -m "Auto-sync: $TITLE.md" || echo "No changes to commit"
-            git push origin main
-          else
-            echo "No file downloaded, skipping commit."
+            exit 1
           fi
