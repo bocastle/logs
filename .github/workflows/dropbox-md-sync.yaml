@@ -27,10 +27,30 @@ jobs:
             --header "Content-Type: application/json" \
             --data '{"path": "/Apps"}' \
             -o response.json
+      - name: List contents of /Apps folder
+        run: |
+          # /Apps 폴더 내 항목을 조회
+          curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --data '{"path": "/Apps"}' \
+            -o response.json
 
+          # response.json 파일 내용을 출력하여 확인
+          cat response.json
+
+          # 실제 항목을 출력하고 확인
+          if jq -e '.entries | length > 0' response.json > /dev/null; then
+            echo "Contents of /Apps folder:"
+            jq -r '.entries[].name' response.json
+          else
+            echo "No files or folders in /Apps"
+            exit 1
+          fi
       - name: Check if bocelog folder exists
         run: |
-          if jq -e '.entries[] | select(.name == "bocelog")' response.json > /dev/null; then
+          cat response.json  # response.json 내용을 출력해서 확인
+          if jq -e '.entries[] | select(.name == "bocelog" and .".tag" == "folder")' response.json > /dev/null; then
             echo "bocelog folder exists!"
           else
             echo "bocelog folder does not exist."
