@@ -28,34 +28,48 @@ jobs:
           DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
           DATE: ${{ env.DATE }}
         run: |
-          # Dropbox에서 해당 날짜 파일 목록 가져오기
-          FILE_LIST=$(curl -X POST https://api.dropboxapi.com/2/files/list_folder \
-            --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-            --header "Content-Type: application/json" \
-            --data "{\"path\": \"/$DATE\"}" | jq -r '.entries[].name')
+          DATE=${{ env.DATE }}
+          echo "Checking Dropbox for /$DATE"
 
-          # 파일 목록을 순회하며 조건에 맞는 파일 찾기
-          for FILE in $FILE_LIST; do
-            if [[ $FILE =~ ^.*_${DATE}_.+\.md$ ]]; then
-              echo "Found file: $FILE"
-              # Dropbox에서 파일 다운로드
-              curl -X POST https://content.dropboxapi.com/2/files/download \
-                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-                --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
-                --output temp.md
+           # Dropbox API 호출하여 파일 목록 가져오기
+           response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+             --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+             --header "Content-Type: application/json" \
+             --data "{\"path\": \"/$DATE\"}")
 
-              # 카테고리와 제목 추출 (파일명으로부터)
-              CATEGORY=$(echo $FILE | cut -d'_' -f1)  # JavaScript, Go 등
-              TITLE=$(echo $FILE | cut -d'_' -f2- | sed 's/.md//')  # 약수의 개수 구하기 등
+           echo "API Response: $response"
+           
+           # 파일 목록이 존재하는지 체크
+           FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
+           if [ -z "$FILE_LIST" ]; then
+             echo "No files found or API error."
+             exit 0
+           else
+             echo "Files found: $FILE_LIST"
+           fi
 
-              # 폴더에 파일을 이동시키고 Git에 추가
-              if [ -f temp.md ]; then
-                mkdir -p $CATEGORY
-                mv temp.md $CATEGORY/$TITLE.md
-                git add $CATEGORY/$TITLE.md
-              fi
-            fi
-          done
+           # 파일 목록을 순회하며 조건에 맞는 파일 처리
+           for FILE in $FILE_LIST; do
+             if [[ $FILE =~ ^JavaScript_.*_${DATE}_.+\.md$ ]]; then
+               echo "Found file: $FILE"
+               
+               # Dropbox에서 파일 다운로드
+               curl -X POST https://content.dropboxapi.com/2/files/download \
+                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                 --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
+                 --output temp.md
+               
+               # 카테고리와 제목 추출 (파일명으로부터)
+               CATEGORY=$(echo $FILE | cut -d'_' -f1)
+               TITLE=$(echo $FILE | cut -d'_' -f2- | sed 's/.md//')
+
+               if [ -f temp.md ]; then
+                 mkdir -p $CATEGORY
+                 mv temp.md $CATEGORY/$TITLE.md
+                 git add $CATEGORY/$TITLE.md
+               fi
+             fi
+           done
 
       - name: Commit and Push if files exist
         run: |
