@@ -62,11 +62,17 @@ jobs:
                # 카테고리와 제목 추출 (파일명으로부터)
                CATEGORY=$(echo $FILE | cut -d'_' -f1)
                TITLE=$(echo $FILE | cut -d'_' -f2- | sed 's/.md//')
+               # CATEGORY와 TITLE 값 확인
+               echo "Category: $CATEGORY"
+               echo "Title: $TITLE"
 
-               if [ -f temp.md ]; then
+                if [ -f temp.md ]; then
+                 echo "temp.md exists, moving file..."
                  mkdir -p $CATEGORY
                  mv temp.md $CATEGORY/$TITLE.md
                  git add $CATEGORY/$TITLE.md
+                else
+                 echo "temp.md does not exist, skipping move"
                fi
              fi
            done
