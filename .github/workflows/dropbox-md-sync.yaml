@@ -2,9 +2,7 @@ name: Sync Markdown from Dropbox
 
 on:
   schedule:
-    - cron: "0 0 * * *" # 한국시간 오전 9시
-    - cron: "0 2 * * *" # 한국시간 오전 11시
-    - cron: "0 4 * * *" # 한국시간 오후 1시
+    - cron: "0 12 * * *" # UTC 기준으로 오후 9시 (한국시간)
   workflow_dispatch:
 
 jobs:
@@ -17,42 +15,53 @@ jobs:
 
       - name: Set up Git config
         run: |
-          git config --global user.name "김보성"
-          git config --global user.email "bocastle1213@gmail.com"
+          git config --global user.name "your-username"
+          git config --global user.email "your-email@example.com"
 
-      - name: Set up Dropbox API call
+      - name: Calculate today's date
+        id: time
         run: |
-          curl -X POST https://api.dropboxapi.com/2/files/list_folder \
-            --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
+          echo "DATE=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
+
+      - name: Download Markdown files from Dropbox
+        env:
+          DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+          DATE: ${{ env.DATE }}
+        run: |
+          # Dropbox에서 해당 날짜 파일 목록 가져오기
+          FILE_LIST=$(curl -X POST https://api.dropboxapi.com/2/files/list_folder \
+            --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
             --header "Content-Type: application/json" \
-            --data '{"path": "/Apps"}' \
-            -o response.json
-      - name: List contents of /Apps folder
-        run: |
-          # /Apps 폴더 내 항목을 조회
-          curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
-            --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
-            --header "Content-Type: application/json" \
-            --data '{"path": ""}' \
-            -o response.json
+            --data "{\"path\": \"/$DATE\"}" | jq -r '.entries[].name')
 
-          # response.json 파일 내용을 출력하여 확인
-          cat response.json
+          # 파일 목록을 순회하며 조건에 맞는 파일 찾기
+          for FILE in $FILE_LIST; do
+            if [[ $FILE =~ ^.*_${DATE}_.+\.md$ ]]; then
+              echo "Found file: $FILE"
+              # Dropbox에서 파일 다운로드
+              curl -X POST https://content.dropboxapi.com/2/files/download \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
+                --output temp.md
 
-          # 실제 항목을 출력하고 확인
-          if jq -e '.entries | length > 0' response.json > /dev/null; then
-            echo "Contents of /Apps folder:"
-            jq -r '.entries[].name' response.json
-          else
-            echo "No files or folders in /Apps"
-            exit 1
-          fi
-      - name: Check if bocelog folder exists
+              # 카테고리와 제목 추출 (파일명으로부터)
+              CATEGORY=$(echo $FILE | cut -d'_' -f1)  # JavaScript, Go 등
+              TITLE=$(echo $FILE | cut -d'_' -f2- | sed 's/.md//')  # 약수의 개수 구하기 등
+
+              # 폴더에 파일을 이동시키고 Git에 추가
+              if [ -f temp.md ]; then
+                mkdir -p $CATEGORY
+                mv temp.md $CATEGORY/$TITLE.md
+                git add $CATEGORY/$TITLE.md
+              fi
+            fi
+          done
+
+      - name: Commit and Push if files exist
         run: |
-          cat response.json  # response.json 내용을 출력해서 확인
-          if jq -e '.entries[] | select(.name == "bocelog" and .".tag" == "folder")' response.json > /dev/null; then
-            echo "bocelog folder exists!"
+          if git diff --cached --exit-code; then
+            echo "No changes to commit"
           else
-            echo "bocelog folder does not exist."
-            exit 1
+            git commit -m "Auto-sync: Updated Markdown files"
+            git push origin main
           fi
