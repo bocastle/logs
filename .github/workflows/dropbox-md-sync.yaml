@@ -32,6 +32,21 @@ jobs:
           DATE: ${{ env.date }}
           HOUR: ${{ env.hour }}
         run: |
+          echo "Checking Dropbox for /Apps/bocelog/$DATE"
+           response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "{\"path\": \"/Apps/bocelog/$DATE\"}")
+
+          echo "API Response: $response"
+            if [ "$response" != "null" ] && [ ! -z "$response" ]; then
+              FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
+              echo "Files found: $FILE_LIST"
+            else
+              echo "No files found or API error."
+              exit 0
+            fi
+
           # Dropbox에서 파일 목록 가져오기
           FILE_LIST=$(curl -X POST https://api.dropboxapi.com/2/files/list_folder \
             --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
