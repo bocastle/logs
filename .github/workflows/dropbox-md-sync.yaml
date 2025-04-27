@@ -32,6 +32,10 @@ jobs:
             --data '{"path": "/Apps"}' \
             -o response.json
 
+      - name: Check the API response
+        run: |
+          cat response.json  # 이 부분을 추가하여 응답 내용을 확인
+
       - name: Check if bocelog folder exists
         run: |
           if jq -e '.entries[] | select(.name == "bocelog")' response.json > /dev/null; then
