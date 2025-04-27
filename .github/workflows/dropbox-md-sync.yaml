@@ -33,7 +33,7 @@ jobs:
           curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
             --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
             --header "Content-Type: application/json" \
-            --data '{"path": "/"}' \
+            --data '{"path": ""}' \
             -o response.json
 
           # response.json 파일 내용을 출력하여 확인
