@@ -34,7 +34,7 @@ jobs:
            response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
             --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
             --header "Content-Type: application/json" \
-            --data "{\"path\": \"/Apps/bocelog/$DATE\"}")
+            --data "{\"path\": \"/모든파일/앱/bocelog/$DATE\"}")
 
           echo "API Response: $response"
             if [ "$response" != "null" ] && [ ! -z "$response" ]; then
@@ -58,7 +58,7 @@ jobs:
                 # Dropbox에서 파일 다운로드
                 curl -X POST https://content.dropboxapi.com/2/files/download \
                   --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-                  --header "Dropbox-API-Arg: {\"path\": \"/Apps/bocelog/$DATE/$FILE\"}" \
+                  --header "Dropbox-API-Arg: {\"path\": \"/모든파일/앱/bocelog/$DATE/$FILE\"}" \
                   --output temp.md
 
                 # 카테고리와 제목 추출 (파일명으로부터)
