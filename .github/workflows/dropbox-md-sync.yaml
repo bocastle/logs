@@ -24,11 +24,28 @@ jobs:
         id: time
         run: |
           echo "DATE=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
+      - name: Set up Dropbox API call
+        run: |
+          curl -X POST https://api.dropboxapi.com/2/files/list_folder \
+            --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --data '{"path": "/Apps"}' \
+            -o response.json
+
+      - name: Check if bocelog folder exists
+        run: |
+          if jq -e '.entries[] | select(.name == "bocelog")' response.json > /dev/null; then
+            echo "bocelog folder exists!"
+          else
+            echo "bocelog folder does not exist."
+            exit 1  # 폴더가 없으면 오류를 반환
+          fi
 
       - name: Download Markdown file from Dropbox
         env:
           DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
           DATE: ${{ env.date }}
+
         run: |
           echo "Checking Dropbox for /Apps/bocelog/$DATE"
            response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
