@@ -23,8 +23,8 @@ jobs:
       - name: Calculate today's date and hour
         id: time
         run: |
-          echo "date=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
-          echo "hour=$(date +'%H')" >> $GITHUB_ENV
+          echo "date=$(TZ='Asia/Seoul' date +'%Y_%m_%d')" >> $GITHUB_ENV
+          echo "hour=$(TZ='Asia/Seoul' date +'%H')" >> $GITHUB_ENV
 
       - name: Download Markdown file from Dropbox
         env:
