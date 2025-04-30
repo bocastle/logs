@@ -50,7 +50,7 @@ jobs:
 
           # 파일 목록을 순회하며 조건에 맞는 파일 처리
           for FILE in $FILE_LIST; do
-            if [[ $FILE =~ ^JavaScript_.*_${DATE}_.+\.md$ ]]; then
+            if [[ $FILE =~ ^JavaScript_.*+\.md$ ]]; then
               echo "Found file: $FILE"
               
               # Dropbox에서 파일 다운로드
