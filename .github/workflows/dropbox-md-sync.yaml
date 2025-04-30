@@ -48,46 +48,37 @@ jobs:
             echo "Files found: $FILE_LIST"
           fi
 
-          # 파일 목록이 존재하는지 체크
-            FILE_LIST=$(echo "$response" | jq -r '.entries[].name' | tr '\n' ' ')
-            if [ -z "$FILE_LIST" ]; then
-              echo "No files found or API error."
-              exit 0
-            else
-              echo "Files found: $FILE_LIST"
-            fi
+          # 파일 목록을 배열로 처리
+          IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST"
+          for FILE in "${FILE_ARRAY[@]}"; do
+            echo "Checking file: $FILE"
+            if [[ $FILE =~ ^JavaScript_.*\.md$ ]]; then
+              echo "Found file: $FILE"
+              
+              # Dropbox에서 파일 다운로드
+              curl -X POST https://content.dropboxapi.com/2/files/download \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
+                --output temp.md
+              
+              # 카테고리와 제목 추출 (파일명으로부터)
+              CATEGORY=$(echo $FILE | cut -d'_' -f1)
+              TITLE=$(echo $FILE | cut -d'_' -f2- | sed 's/.md//')
+              echo "Category: $CATEGORY"
+              echo "Title: $TITLE"
 
-            # 파일 목록을 배열로 처리
-            IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST"
-            for FILE in "${FILE_ARRAY[@]}"; do
-              echo "Checking file: $FILE"
-              if [[ $FILE =~ ^JavaScript_.*\.md$ ]]; then
-                echo "Found file: $FILE"
-                
-                # Dropbox에서 파일 다운로드
-                curl -X POST https://content.dropboxapi.com/2/files/download \
-                  --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-                  --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
-                  --output temp.md
-                
-                # 카테고리와 제목 추출 (파일명으로부터)
-                CATEGORY=$(echo $FILE | cut -d'_' -f1)
-                TITLE=$(echo $FILE | cut -d'_' -f2- | sed 's/.md//')
-                echo "Category: $CATEGORY"
-                echo "Title: $TITLE"
-
-                if [ -f temp.md ]; then
-                  echo "temp.md exists, moving file..."
-                  mkdir -p $CATEGORY
-                  mv temp.md $CATEGORY/$TITLE.md
-                  git add $CATEGORY/$TITLE.md
-                else
-                  echo "temp.md does not exist, skipping move"
-                fi
+              if [ -f temp.md ]; then
+                echo "temp.md exists, moving file..."
+                mkdir -p $CATEGORY
+                mv temp.md $CATEGORY/$TITLE.md
+                git add $CATEGORY/$TITLE.md
               else
-                echo "File did not match: $FILE"
+                echo "temp.md does not exist, skipping move"
               fi
-            done
+            else
+              echo "File did not match: $FILE"
+            fi
+          done
 
       - name: Commit and Push if files exist
         run: |
