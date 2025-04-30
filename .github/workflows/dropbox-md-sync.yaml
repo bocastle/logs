@@ -82,10 +82,12 @@ jobs:
           done
 
       - name: Commit and Push if files exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git diff --cached --exit-code; then
             echo "No changes to commit"
           else
             git commit -m "Auto-sync: Updated Markdown files"
-            git push origin main
+            git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
           fi
