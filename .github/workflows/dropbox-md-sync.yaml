@@ -120,12 +120,17 @@ jobs:
           # Function to list files with retry
           list_files() {
             echo "Listing files from Dropbox..."
+            local temp_file=$(mktemp)
             local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
-              --data "{\"path\": \"/$DATE\"}")
+              --data "{\"path\": \"/$DATE\"}" \
+              -o "$temp_file" 2>&1)
             
-            if [[ "$response" == *"error"* && "$response" == *"401"* ]]; then
+            local response_body=$(cat "$temp_file")
+            rm "$temp_file"
+            
+            if [[ "$response_body" == *"error"* && "$response_body" == *"401"* ]]; then
               echo "Token expired, refreshing..."
               DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
                 echo "Error: Failed to refresh token during file listing"
@@ -134,10 +139,15 @@ jobs:
               response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                 --header "Content-Type: application/json" \
-                --data "{\"path\": \"/$DATE\"}")
+                --data "{\"path\": \"/$DATE\"}" \
+                -o "$temp_file" 2>&1)
+              response_body=$(cat "$temp_file")
+              rm "$temp_file"
             fi
+            
             echo "File listing response received"
-            echo "$response"
+            echo "$response_body"
+            echo "$response_body"
           }
 
           # Get file list
@@ -149,11 +159,19 @@ jobs:
             exit 1
           fi
 
+          # Check if the response contains an error about the path not existing
+          if [[ "$response" == *"path/not_found"* ]]; then
+            echo "No folder found for date $DATE in Dropbox"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
           # Process files
           echo "Processing file list..."
           FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
           if [ -z "$FILE_LIST" ]; then
             echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
             exit 0
           fi
 
@@ -162,6 +180,11 @@ jobs:
 
           # Process each file
           IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST" || true
+          if [ ${#FILE_ARRAY[@]} -eq 0 ]; then
+            echo "No files to process"
+            exit 0
+          fi
+
           for FILE in "${FILE_ARRAY[@]}"; do
             if [[ $FILE =~ \.md$ ]]; then
               echo "Processing file: $FILE"
@@ -215,8 +238,10 @@ jobs:
           if git diff --cached --exit-code; then
             echo "No changes to commit"
           else
-            echo "Committing changes..."
-            git commit -m "feat: Sync markdown files from Dropbox for $DATE"
+            # Get the title from the first changed file
+            TITLE=$(git diff --cached --name-only | head -n1 | sed 's/.*\///' | sed 's/\.md$//')
+            echo "Committing changes for file: $TITLE"
+            git commit -m "feat: ${TITLE}"
             echo "Pushing changes..."
             git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
             echo "Changes pushed successfully"
