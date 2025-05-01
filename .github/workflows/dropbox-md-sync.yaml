@@ -43,10 +43,10 @@ jobs:
           # Set the date in GitHub environment
           echo "DATE=$TODAY" >> $GITHUB_ENV
           # Verify the date was set correctly
-          echo "Date set to: $DATE"
+          echo "Date set to: $TODAY"
           # Double check the date
-          if [ "$DATE" != "$TODAY" ]; then
-            echo "Error: Date mismatch. Expected $TODAY but got $DATE"
+          if [ "$TODAY" != "$(date +'%Y_%m_%d')" ]; then
+            echo "Error: Date mismatch. Expected $TODAY but got $(date +'%Y_%m_%d')"
             exit 1
           fi
 
@@ -56,11 +56,13 @@ jobs:
           DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
           DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
           DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          DATE: ${{ env.DATE }}
         run: |
           set -e  # Exit immediately if a command exits with a non-zero status
           set -x  # Print commands and their arguments as they are executed
 
           echo "Starting Dropbox sync process..."
+          echo "Using date: $DATE"
 
           # Function to get access token
           get_access_token() {
