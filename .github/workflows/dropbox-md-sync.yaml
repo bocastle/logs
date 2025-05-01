@@ -3,9 +3,10 @@ name: Sync Markdown from Dropbox
 
 # 워크플로우 실행 조건 설정
 on:
-  # 매일 UTC 기준 오후 12시(한국시간 오후 9시)에 실행
+  # 매일 한국시간 오후 9시에 실행
+  # UTC 12:00 = KST 21:00 (UTC+9)
   schedule:
-    - cron: "0 12 * * *" # UTC 기준으로 오후 9시 (한국시간)
+    - cron: "0 12 * * *"
   # 수동으로도 실행 가능하도록 설정
   workflow_dispatch:
 
@@ -33,8 +34,21 @@ jobs:
         id: time
         run: |
           echo "Calculating today's date..."
-          echo "DATE=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
+          # Set timezone to Asia/Seoul
+          export TZ='Asia/Seoul'
+          # Get current date in YYYY_MM_DD format
+          TODAY=$(date +'%Y_%m_%d')
+          echo "Current timezone: $TZ"
+          echo "Calculated date: $TODAY"
+          # Set the date in GitHub environment
+          echo "DATE=$TODAY" >> $GITHUB_ENV
+          # Verify the date was set correctly
           echo "Date set to: $DATE"
+          # Double check the date
+          if [ "$DATE" != "$TODAY" ]; then
+            echo "Error: Date mismatch. Expected $TODAY but got $DATE"
+            exit 1
+          fi
 
       # 4. Dropbox에서 마크다운 파일 다운로드
       - name: Get Dropbox Access Token and Sync Files
