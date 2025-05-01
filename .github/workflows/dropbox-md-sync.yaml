@@ -33,32 +33,25 @@ jobs:
           echo "DATE=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
 
       # 4. Dropbox에서 마크다운 파일 다운로드
-      - name: Download Markdown files from Dropbox
+      - name: Get Dropbox Access Token using Refresh Token
         env:
           DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
           DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
-          DATE: ${{ env.DATE }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
         run: |
-          DATE=${{ env.DATE }}
-          echo "Checking Dropbox for /$DATE"
+          # Get new access token using refresh token
+          response=$(curl -s -X POST https://api.dropbox.com/oauth2/token \
+            -d grant_type=refresh_token \
+            -d refresh_token=$DROPBOX_REFRESH_TOKEN \
+            -u "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET")
 
-          # 토큰 관리 함수들
-          get_access_token() {
-            echo "Getting new access token..."
-            response=$(curl -s -X POST https://api.dropbox.com/oauth2/token \
-              -d grant_type=client_credentials \
-              -d client_id=$DROPBOX_APP_KEY \
-              -d client_secret=$DROPBOX_APP_SECRET)
-            
-            access_token=$(echo "$response" | jq -r '.access_token')
-            if [ "$access_token" != "null" ]; then
-              echo "Access token obtained successfully"
-              export DROPBOX_ACCESS_TOKEN=$access_token
-            else
-              echo "Failed to get access token"
-              exit 1
-            fi
-          }
+          DROPBOX_ACCESS_TOKEN=$(echo "$response" | jq -r '.access_token')
+          if [ "$DROPBOX_ACCESS_TOKEN" == "null" ]; then
+            echo "Failed to refresh access token"
+            exit 1
+          else
+            echo "Access token refreshed successfully"
+          fi
 
           # 초기 액세스 토큰 획득
           get_access_token
