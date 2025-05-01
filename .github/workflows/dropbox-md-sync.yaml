@@ -122,12 +122,15 @@ jobs:
             echo "Listing files from Dropbox..."
             local temp_file=$(mktemp)
             
-            # Make the API call and capture both response and status code
-            local http_code=$(curl -s -w "%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
+            # Make the API call with verbose output for debugging
+            echo "Making API call to Dropbox..."
+            echo "Using token: ${DROPBOX_ACCESS_TOKEN:0:10}..." # Show first 10 chars of token for debugging
+            
+            local http_code=$(curl -v -s -w "%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}" \
-              -o "$temp_file")
+              -o "$temp_file" 2>&1)
             
             local response_body=$(cat "$temp_file")
             rm "$temp_file"
@@ -136,9 +139,17 @@ jobs:
             echo "Raw API Response:"
             echo "$response_body"
             
+            # Check if curl command failed
+            if [ $? -ne 0 ]; then
+              echo "Error: curl command failed"
+              echo "Response body: $response_body"
+              return 1
+            fi
+            
             # Check HTTP status code
             if [ "$http_code" != "200" ]; then
               echo "Error: HTTP request failed with status $http_code"
+              echo "Response body: $response_body"
               return 1
             fi
             
@@ -167,11 +178,12 @@ jobs:
                   return 1
                 }
                 # Retry the API call with new token
-                http_code=$(curl -s -w "%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
+                echo "Retrying API call with new token..."
+                http_code=$(curl -v -s -w "%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
                   --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                   --header "Content-Type: application/json" \
                   --data "{\"path\": \"/$DATE\"}" \
-                  -o "$temp_file")
+                  -o "$temp_file" 2>&1)
                 
                 response_body=$(cat "$temp_file")
                 rm "$temp_file"
