@@ -134,7 +134,7 @@ jobs:
             if [ -z "$response_body" ]; then
               echo "No folder found for date $DATE in Dropbox"
               echo "This is normal if no files were uploaded for this date"
-              return 0
+              exit 0
             fi
             
             if [[ "$response_body" == *"error"* && "$response_body" == *"401"* ]]; then
@@ -178,8 +178,14 @@ jobs:
             exit 0
           fi
 
-          # Process files
+          # Only process files if we have a valid response
           echo "Processing file list..."
+          if ! echo "$response" | jq -e '.entries' >/dev/null 2>&1; then
+            echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
           FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
           if [ -z "$FILE_LIST" ]; then
             echo "No files found in Dropbox for date $DATE"
