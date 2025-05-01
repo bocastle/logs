@@ -23,14 +23,18 @@ jobs:
       # 2. Git 설정
       - name: Set up Git config
         run: |
+          echo "Setting up Git config..."
           git config --global user.name "${{ secrets.GIT_USER_NAME }}"
           git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
+          echo "Git config setup completed"
 
       # 3. 오늘 날짜 계산 (YYYY_MM_DD 형식)
       - name: Calculate today's date
         id: time
         run: |
+          echo "Calculating today's date..."
           echo "DATE=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
+          echo "Date set to: $DATE"
 
       # 4. Dropbox에서 마크다운 파일 다운로드
       - name: Get Dropbox Access Token and Sync Files
@@ -39,26 +43,40 @@ jobs:
           DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
           DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
         run: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          set -x  # Print commands and their arguments as they are executed
+
+          echo "Starting Dropbox sync process..."
+
           # Function to get access token
           get_access_token() {
+            echo "Attempting to get access token..."
             local response=$(curl -s -X POST https://api.dropbox.com/oauth2/token \
               -d grant_type=refresh_token \
               -d refresh_token=$DROPBOX_REFRESH_TOKEN \
               -u "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET")
             
+            echo "Token response received"
             local token=$(echo "$response" | jq -r '.access_token')
             if [ "$token" == "null" ]; then
-              echo "Failed to refresh access token"
+              echo "Error: Failed to refresh access token"
+              echo "Response: $response"
               return 1
             fi
+            echo "Access token obtained successfully"
             echo "$token"
           }
 
           # Get initial access token
-          DROPBOX_ACCESS_TOKEN=$(get_access_token) || exit 1
+          echo "Getting initial access token..."
+          DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
+            echo "Error: Failed to get initial access token"
+            exit 1
+          }
 
           # Function to list files with retry
           list_files() {
+            echo "Listing files from Dropbox..."
             local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
@@ -66,28 +84,38 @@ jobs:
             
             if [[ "$response" == *"error"* && "$response" == *"401"* ]]; then
               echo "Token expired, refreshing..."
-              DROPBOX_ACCESS_TOKEN=$(get_access_token) || exit 1
+              DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
+                echo "Error: Failed to refresh token during file listing"
+                exit 1
+              }
               response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                 --header "Content-Type: application/json" \
                 --data "{\"path\": \"/$DATE\"}")
             fi
+            echo "File listing response received"
             echo "$response"
           }
 
           # Get file list
+          echo "Getting file list..."
           response=$(list_files)
           if [ $? -ne 0 ]; then
-            echo "Failed to list files"
+            echo "Error: Failed to list files"
+            echo "Response: $response"
             exit 1
           fi
 
           # Process files
+          echo "Processing file list..."
           FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
           if [ -z "$FILE_LIST" ]; then
             echo "No files found in Dropbox for date $DATE"
             exit 0
           fi
+
+          echo "Found files:"
+          echo "$FILE_LIST"
 
           # Process each file
           IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST" || true
@@ -96,11 +124,12 @@ jobs:
               echo "Processing file: $FILE"
               
               # Download file
+              echo "Downloading file: $FILE"
               if ! curl -s -X POST https://content.dropboxapi.com/2/files/download \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                 --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
                 --output temp.md; then
-                echo "Failed to download file: $FILE"
+                echo "Error: Failed to download file: $FILE"
                 continue
               fi
               
@@ -110,21 +139,27 @@ jobs:
                 TITLE="${BASH_REMATCH[2]}"
                 NUMBER="${BASH_REMATCH[3]}"
                 
+                echo "Parsed file info:"
                 echo "Category: $CATEGORY"
                 echo "Title: $TITLE"
                 echo "Number: $NUMBER"
 
                 # Move file
                 if [ -f temp.md ]; then
+                  echo "Moving file to: $CATEGORY/${TITLE}.md"
                   mkdir -p "$CATEGORY"
                   mv temp.md "$CATEGORY/${TITLE}.md"
                   git add "$CATEGORY/${TITLE}.md"
                   echo "Added file: $CATEGORY/${TITLE}.md"
+                else
+                  echo "Error: temp.md not found after download"
                 fi
               else
-                echo "Invalid filename format: $FILE"
+                echo "Error: Invalid filename format: $FILE"
                 rm -f temp.md
               fi
+            else
+              echo "Skipping non-markdown file: $FILE"
             fi
           done
 
@@ -133,9 +168,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo "Checking for changes to commit..."
           if git diff --cached --exit-code; then
             echo "No changes to commit"
           else
+            echo "Committing changes..."
             git commit -m "feat: Sync markdown files from Dropbox for $DATE"
+            echo "Pushing changes..."
             git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
+            echo "Changes pushed successfully"
           fi
