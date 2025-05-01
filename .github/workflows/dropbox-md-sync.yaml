@@ -23,8 +23,8 @@ jobs:
       # 2. Git 설정
       - name: Set up Git config
         run: |
-          git config --global user.name "김보성"
-          git config --global user.email "bocastle1213@gmail.com"
+          git config --global user.name "${{ secrets.GIT_USER_NAME }}"
+          git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
 
       # 3. 오늘 날짜 계산 (YYYY_MM_DD 형식)
       - name: Calculate today's date
@@ -33,105 +33,109 @@ jobs:
           echo "DATE=$(date +'%Y_%m_%d')" >> $GITHUB_ENV
 
       # 4. Dropbox에서 마크다운 파일 다운로드
-      - name: Get Dropbox Access Token using Refresh Token
+      - name: Get Dropbox Access Token and Sync Files
         env:
           DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
           DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
           DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
         run: |
-          # Get new access token using refresh token
-          response=$(curl -s -X POST https://api.dropbox.com/oauth2/token \
-            -d grant_type=refresh_token \
-            -d refresh_token=$DROPBOX_REFRESH_TOKEN \
-            -u "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET")
-
-          DROPBOX_ACCESS_TOKEN=$(echo "$response" | jq -r '.access_token')
-          if [ "$DROPBOX_ACCESS_TOKEN" == "null" ]; then
-            echo "Failed to refresh access token"
-            exit 1
-          else
-            echo "Access token refreshed successfully"
-          fi
-
-          # 초기 액세스 토큰 획득
-          get_access_token
-
-          # Dropbox API 호출
-          response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
-            --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-            --header "Content-Type: application/json" \
-            --data "{\"path\": \"/$DATE\"}")
-
-          # 토큰 만료 체크 (401 에러)
-          if [[ "$response" == *"error"* && "$response" == *"401"* ]]; then
-            echo "Token expired, getting new token..."
-            get_access_token
+          # Function to get access token
+          get_access_token() {
+            local response=$(curl -s -X POST https://api.dropbox.com/oauth2/token \
+              -d grant_type=refresh_token \
+              -d refresh_token=$DROPBOX_REFRESH_TOKEN \
+              -u "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET")
             
-            # 새로운 토큰으로 다시 시도
-            response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            local token=$(echo "$response" | jq -r '.access_token')
+            if [ "$token" == "null" ]; then
+              echo "Failed to refresh access token"
+              return 1
+            fi
+            echo "$token"
+          }
+
+          # Get initial access token
+          DROPBOX_ACCESS_TOKEN=$(get_access_token) || exit 1
+
+          # Function to list files with retry
+          list_files() {
+            local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}")
+            
+            if [[ "$response" == *"error"* && "$response" == *"401"* ]]; then
+              echo "Token expired, refreshing..."
+              DROPBOX_ACCESS_TOKEN=$(get_access_token) || exit 1
+              response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                --header "Content-Type: application/json" \
+                --data "{\"path\": \"/$DATE\"}")
+            fi
+            echo "$response"
+          }
+
+          # Get file list
+          response=$(list_files)
+          if [ $? -ne 0 ]; then
+            echo "Failed to list files"
+            exit 1
           fi
 
-          echo "API Response: $response"
-
-          # 파일 목록이 있는지 확인
+          # Process files
           FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
           if [ -z "$FILE_LIST" ]; then
-            echo "No files found or API error."
+            echo "No files found in Dropbox for date $DATE"
             exit 0
-          else
-            echo "Files found:"
-            echo "$FILE_LIST"
           fi
 
-          # 파일 목록을 배열로 변환하여 처리
+          # Process each file
           IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST" || true
           for FILE in "${FILE_ARRAY[@]}"; do
-            echo "Checking file: $FILE"
-            # .md 파일만 처리
             if [[ $FILE =~ \.md$ ]]; then
-              echo "Found file: $FILE"
+              echo "Processing file: $FILE"
               
-              # Dropbox에서 파일 다운로드
-              curl -X POST https://content.dropboxapi.com/2/files/download \
+              # Download file
+              if ! curl -s -X POST https://content.dropboxapi.com/2/files/download \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                 --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
-                --output temp.md || { echo "File download failed for $FILE"; exit 1; }
-              
-              # 파일명에서 카테고리, 제목, 번호 추출 (CATEGORY_TITLE_Number 형식)
-              CATEGORY=$(echo "$FILE" | cut -d'_' -f1)
-              TITLE=$(echo "$FILE" | cut -d'_' -f2)
-              NUMBER=$(echo "$FILE" | cut -d'_' -f3 | sed 's/.md//')
-              
-              echo "Category: $CATEGORY"
-              echo "Title: $TITLE"
-              echo "Number: $NUMBER"
-
-              # 다운로드된 파일이 존재하면 적절한 위치로 이동
-              if [ -f temp.md ]; then
-                echo "temp.md exists, moving file..."
-                mkdir -p "$CATEGORY"
-                # 파일명을 CATEGORY/Title.md 형식으로 저장 (_Number 부분 제거)
-                mv temp.md "$CATEGORY/${TITLE}.md"
-                git add "$CATEGORY/${TITLE}.md"
-              else
-                echo "temp.md does not exist, skipping move"
+                --output temp.md; then
+                echo "Failed to download file: $FILE"
+                continue
               fi
-            else
-              echo "File did not match: $FILE"
+              
+              # Parse filename (more robust approach)
+              if [[ $FILE =~ ^([^_]+)_([^_]+)_([0-9]+)\.md$ ]]; then
+                CATEGORY="${BASH_REMATCH[1]}"
+                TITLE="${BASH_REMATCH[2]}"
+                NUMBER="${BASH_REMATCH[3]}"
+                
+                echo "Category: $CATEGORY"
+                echo "Title: $TITLE"
+                echo "Number: $NUMBER"
+
+                # Move file
+                if [ -f temp.md ]; then
+                  mkdir -p "$CATEGORY"
+                  mv temp.md "$CATEGORY/${TITLE}.md"
+                  git add "$CATEGORY/${TITLE}.md"
+                  echo "Added file: $CATEGORY/${TITLE}.md"
+                fi
+              else
+                echo "Invalid filename format: $FILE"
+                rm -f temp.md
+              fi
             fi
           done
 
       # 5. 변경사항이 있으면 커밋하고 푸시
-      - name: Commit and Push if files exist
+      - name: Commit and Push Changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git diff --cached --exit-code; then
             echo "No changes to commit"
           else
-            git commit -m "feat: ${TITLE}"
+            git commit -m "feat: Sync markdown files from Dropbox for $DATE"
             git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
           fi
