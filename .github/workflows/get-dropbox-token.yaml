@@ -1,0 +1,71 @@
+name: Get Dropbox Refresh Token
+
+on:
+  workflow_dispatch:
+    inputs:
+      auth_code:
+        description: "Dropbox Authorization Code"
+        required: true
+        type: string
+
+jobs:
+  get-token:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dropbox
+
+      - name: Generate Refresh Token
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          AUTH_CODE: ${{ github.event.inputs.auth_code }}
+        run: |
+          python - <<EOF
+          from dropbox import DropboxOAuth2FlowNoRedirect
+          import os
+          import sys
+
+          # Get credentials from environment variables
+          APP_KEY = os.environ.get('DROPBOX_APP_KEY')
+          APP_SECRET = os.environ.get('DROPBOX_APP_SECRET')
+          AUTH_CODE = os.environ.get('AUTH_CODE')
+
+          if not all([APP_KEY, APP_SECRET, AUTH_CODE]):
+              print("Error: Missing required environment variables")
+              sys.exit(1)
+
+          try:
+              # Initialize OAuth flow
+              auth_flow = DropboxOAuth2FlowNoRedirect(APP_KEY, APP_SECRET)
+              
+              # Get tokens using the auth code
+              oauth_result = auth_flow.finish(AUTH_CODE)
+              
+              print("\n=== Dropbox Token Information ===")
+              print("Access Token:", oauth_result.access_token)
+              print("Refresh Token:", oauth_result.refresh_token)
+              print("\nPlease add the Refresh Token to your GitHub Secrets as DROPBOX_REFRESH_TOKEN")
+              
+          except Exception as e:
+              print("Error:", str(e))
+              sys.exit(1)
+          EOF
+
+      - name: Get Authorization URL
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+        run: |
+          echo "To get the authorization code:"
+          echo "1. Visit this URL: https://www.dropbox.com/oauth2/authorize?client_id=$DROPBOX_APP_KEY&response_type=code&token_access_type=offline"
+          echo "2. Log in to Dropbox and authorize the app"
+          echo "3. Copy the authorization code"
+          echo "4. Run this workflow again with the authorization code"
