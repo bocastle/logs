@@ -121,17 +121,26 @@ jobs:
           list_files() {
             echo "Listing files from Dropbox..."
             local temp_file=$(mktemp)
-            local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            
+            # Make the API call and capture both response and status code
+            local http_code=$(curl -s -w "%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}" \
-              -o "$temp_file" 2>&1)
+              -o "$temp_file")
             
             local response_body=$(cat "$temp_file")
             rm "$temp_file"
             
+            echo "HTTP Status Code: $http_code"
             echo "Raw API Response:"
             echo "$response_body"
+            
+            # Check HTTP status code
+            if [ "$http_code" != "200" ]; then
+              echo "Error: HTTP request failed with status $http_code"
+              return 1
+            fi
             
             # Check if response is valid JSON
             if ! echo "$response_body" | jq . >/dev/null 2>&1; then
@@ -157,14 +166,17 @@ jobs:
                   echo "Error: Failed to refresh token during file listing"
                   return 1
                 }
-                response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+                # Retry the API call with new token
+                http_code=$(curl -s -w "%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
                   --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                   --header "Content-Type: application/json" \
                   --data "{\"path\": \"/$DATE\"}" \
-                  -o "$temp_file" 2>&1)
+                  -o "$temp_file")
+                
                 response_body=$(cat "$temp_file")
                 rm "$temp_file"
                 
+                echo "Retry HTTP Status Code: $http_code"
                 echo "Retry Response:"
                 echo "$response_body"
               fi
