@@ -235,6 +235,10 @@ jobs:
                   mv temp.md "$CATEGORY/${TITLE}.md"
                   git add "$CATEGORY/${TITLE}.md"
                   echo "Added file: $CATEGORY/${TITLE}.md"
+                  
+                  # Commit each file individually
+                  echo "Committing file: $TITLE"
+                  git commit -m "feat: ${TITLE}"
                 else
                   echo "Error: temp.md not found after download"
                 fi
@@ -247,20 +251,7 @@ jobs:
             fi
           done
 
-      # 5. 변경사항이 있으면 커밋하고 푸시
-      - name: Commit and Push Changes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Checking for changes to commit..."
-          if git diff --cached --exit-code; then
-            echo "No changes to commit"
-          else
-            # Get the title from the first changed file
-            TITLE=$(git diff --cached --name-only | head -n1 | sed 's/.*\///' | sed 's/\.md$//')
-            echo "Committing changes for file: $TITLE"
-            git commit -m "feat: ${TITLE}"
-            echo "Pushing changes..."
-            git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
-            echo "Changes pushed successfully"
-          fi
+          # Push all commits at the end
+          echo "Pushing all commits..."
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
+          echo "Changes pushed successfully"
