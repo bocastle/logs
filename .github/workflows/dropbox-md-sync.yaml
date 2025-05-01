@@ -130,23 +130,46 @@ jobs:
             local response_body=$(cat "$temp_file")
             rm "$temp_file"
             
-            if [[ "$response_body" == *"error"* && "$response_body" == *"401"* ]]; then
-              echo "Token expired, refreshing..."
-              DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
-                echo "Error: Failed to refresh token during file listing"
-                exit 1
-              }
-              response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
-                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
-                --header "Content-Type: application/json" \
-                --data "{\"path\": \"/$DATE\"}" \
-                -o "$temp_file" 2>&1)
-              response_body=$(cat "$temp_file")
-              rm "$temp_file"
+            echo "Raw API Response:"
+            echo "$response_body"
+            
+            # Check if response is valid JSON
+            if ! echo "$response_body" | jq . >/dev/null 2>&1; then
+              echo "Error: Invalid JSON response from Dropbox API"
+              echo "Response body: $response_body"
+              return 1
             fi
             
-            echo "File listing response received"
-            echo "$response_body"
+            # Check for specific error cases
+            if echo "$response_body" | jq -e '.error_summary' >/dev/null 2>&1; then
+              local error_type=$(echo "$response_body" | jq -r '.error_summary')
+              echo "Dropbox API Error: $error_type"
+              
+              if [[ "$error_type" == *"path/not_found"* ]]; then
+                echo "No folder found for date $DATE in Dropbox"
+                echo "This is normal if no files were uploaded for this date"
+                return 0
+              fi
+              
+              if [[ "$error_type" == *"invalid_access_token"* ]]; then
+                echo "Token expired, refreshing..."
+                DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
+                  echo "Error: Failed to refresh token during file listing"
+                  return 1
+                }
+                response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+                  --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                  --header "Content-Type: application/json" \
+                  --data "{\"path\": \"/$DATE\"}" \
+                  -o "$temp_file" 2>&1)
+                response_body=$(cat "$temp_file")
+                rm "$temp_file"
+                
+                echo "Retry Response:"
+                echo "$response_body"
+              fi
+            fi
+            
             echo "$response_body"
           }
 
@@ -159,15 +182,14 @@ jobs:
             exit 1
           fi
 
-          # Check if the response contains an error about the path not existing
-          if [[ "$response" == *"path/not_found"* ]]; then
-            echo "No folder found for date $DATE in Dropbox"
+          # Process files
+          echo "Processing file list..."
+          if ! echo "$response" | jq -e '.entries' >/dev/null 2>&1; then
+            echo "No files found in Dropbox for date $DATE"
             echo "This is normal if no files were uploaded for this date"
             exit 0
           fi
 
-          # Process files
-          echo "Processing file list..."
           FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
           if [ -z "$FILE_LIST" ]; then
             echo "No files found in Dropbox for date $DATE"
