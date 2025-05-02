@@ -1,5 +1,5 @@
 # 워크플로우 이름 정의
-name: Sync Markdown from Dropbox
+name: Sync Markdown from Dropbox V2
 
 # 워크플로우 실행 조건 설정
 on:
@@ -94,9 +94,11 @@ jobs:
           # 토큰을 얻어 환경변수에 설정
           DROPBOX_ACCESS_TOKEN=$(get_access_token) || exit 1
 
-          # 토큰 확인을 위한 출력
-          echo "Access token is: $DROPBOX_ACCESS_TOKEN"
       # 토큰 확인
       - name: Set DROPBOX_ACCESS_TOKEN environment variable
         run: |
+          # 토큰 확인 (디버그용)
+          echo "Current DROPBOX_ACCESS_TOKEN value is: $DROPBOX_ACCESS_TOKEN"
+
+          # 토큰을 GitHub 환경 변수에 설정
           echo "DROPBOX_ACCESS_TOKEN=$DROPBOX_ACCESS_TOKEN" >> $GITHUB_ENV
