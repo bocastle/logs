@@ -140,7 +140,7 @@ jobs:
             local response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
-              --data "{\"path\": "/$DATE"}" \ \
+              --data "{\"path\": "/$DATE"}" \
               -o "$temp_file" 2>&1)
 
             local http_code=$(echo "$response" | tail -n1)
