@@ -102,3 +102,4 @@ jobs:
           echo "DROPBOX_ACCESS_TOKEN=$DROPBOX_ACCESS_TOKEN"
           # 여기서 환경 변수 설정
           echo "DROPBOX_ACCESS_TOKEN=$DROPBOX_ACCESS_TOKEN" >> $GITHUB_ENV
+          echo "DROPBOX_ACCESS_TOKEN environment variable has been set"
