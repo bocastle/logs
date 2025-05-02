@@ -136,7 +136,8 @@ jobs:
           # Function to list files with retry
           list_files() {
             echo "Listing files from Dropbox... $DATE"
-
+            echo "Access Token: ${#DROPBOX_ACCESS_TOKEN} characters"
+            
             temp_file=$(mktemp)
             response=$(curl -v -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
