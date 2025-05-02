@@ -141,7 +141,7 @@ jobs:
             response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
-              --data "{"path": ""}")
+              --data '{"path": ""}')
 
             echo "API Response!!!!!!!!: $response"
             http_code=$(echo "$response" | tail -n1)
@@ -164,7 +164,7 @@ jobs:
               response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
-              --data "{"path": ""}")
+              --data '{"path": ""}')
 
               echo "API Response: $response"
               response_body=$(cat "$temp_file")
