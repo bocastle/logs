@@ -132,6 +132,7 @@ jobs:
             echo "Error: Failed to get initial access token"
             exit 1
           }
+           echo "DROPBOX_ACCESS_TOKEN: $DROPBOX_ACCESS_TOKEN"
 
           # Function to list files with retry
           list_files() {
