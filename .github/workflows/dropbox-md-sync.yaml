@@ -83,11 +83,12 @@ jobs:
             # Make the API call with proper OAuth 2.0 headers
             echo "Making API call to Dropbox..."
             local temp_file=$(mktemp)
-            local response=$(curl -s -w -X POST https://api.dropbox.com/oauth2/token \
+            local response=$(curl -v -X POST https://api.dropbox.com/oauth2/token \
               -H "Authorization: Basic $client_credentials" \
               -H "Content-Type: application/x-www-form-urlencoded" \
               -d "grant_type=refresh_token" \
               -d "refresh_token=$DROPBOX_REFRESH_TOKEN" \
+           
               -o "$temp_file" 2>&1)
             
             local http_code=$(echo "$response" | tail -n1)
@@ -136,7 +137,7 @@ jobs:
           list_files() {
             echo "Listing files from Dropbox..."
             local temp_file=$(mktemp)
-            local response=$(curl -s -w -X POST https://api.dropboxapi.com/2/files/list_folder \
+            local response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"\"}" \
@@ -158,7 +159,7 @@ jobs:
                 echo "Error: Failed to refresh token during file listing"
                 exit 1
               }
-              response=$(curl -s -w -X POST https://api.dropboxapi.com/2/files/list_folder \
+              response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                 --header "Content-Type: application/json" \
                 --data "{\"path\": \"\"}" \
