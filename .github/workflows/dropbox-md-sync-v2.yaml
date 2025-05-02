@@ -111,3 +111,29 @@ jobs:
             echo "Failed to list Dropbox folder: HTTP $http_code"
             exit 1
           fi
+
+          # Check if response is empty
+          if [ -z "$response_body" ]; then
+            echo "No folder found for date $DATE in Dropbox"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          # Token expired check (error 401)
+          if [[ "$response_body" == *"error"* && "$response_body" == *"401"* ]]; then
+            echo "Token expired, refreshing..."
+            DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
+              echo "Error: Failed to refresh token during file listing"
+              exit 1
+            }
+
+            # Retry the list_folder request with refreshed token
+            response_body=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+              --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "{\"path\": \"/$DATE\"}")
+
+            echo "API Response after token refresh: $response_body"
+          fi
+
+          echo "Final Response body: $response_body"
