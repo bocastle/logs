@@ -137,7 +137,7 @@ jobs:
           list_files() {
             echo "Listing files from Dropbox..."
             local temp_file=$(mktemp)
-            local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            local response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}" \
@@ -159,7 +159,7 @@ jobs:
                 echo "Error: Failed to refresh token during file listing"
                 exit 1
               }
-              response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+              response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                 --header "Content-Type: application/json" \
                 --data "{\"path\": \"/$DATE\"}" \
@@ -174,7 +174,11 @@ jobs:
           echo "Access Token: $DROPBOX_ACCESS_TOKEN"
           echo "Date: $DATE"
           echo "Raw response: $response"
+
+          echo "Response body: $(cat "$temp_file")" 
+
           echo "Response body: $response_body"
+
 
           # Get file list
           echo "Getting file list..."
