@@ -137,3 +137,89 @@ jobs:
           fi
 
           echo "Final Response body: $response_body"
+
+          # Check if the response_body contains an error about the path not existing
+          if [[ "$response_body" == *"path/not_found"* ]]; then
+            echo "No folder found for date $DATE in Dropbox"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          # Only process files if we have a valid response_body
+          echo "Processing file list..."
+          if ! echo "$response_body" | jq -e '.entries' >/dev/null 2>&1; then
+            echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          FILE_LIST=$(echo "$response_body" | jq -r '.entries[].name')
+          if [ -z "$FILE_LIST" ]; then
+            echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          echo "Found files:"
+          echo "$FILE_LIST"
+
+          # Process each file
+          IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST" || true
+          if [ ${#FILE_ARRAY[@]} -eq 0 ]; then
+            echo "No files to process"
+            exit 0
+          fi
+
+          # Process files one by one
+          for FILE in "${FILE_ARRAY[@]}"; do
+            if [[ $FILE =~ \.md$ ]]; then
+              echo "Processing file: $FILE"
+              
+              # Download file
+              echo "Downloading file: $FILE"
+              if ! curl -s -X POST https://content.dropboxapi.com/2/files/download \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
+                --output temp.md; then
+                echo "Error: Failed to download file: $FILE"
+                continue
+              fi
+              
+              # Parse filename (more robust approach)
+              if [[ $FILE =~ ^([^_]+)_([^_]+)_([0-9]+)\.md$ ]]; then
+                CATEGORY="${BASH_REMATCH[1]}"
+                TITLE="${BASH_REMATCH[2]}"
+                NUMBER="${BASH_REMATCH[3]}"
+                
+                echo "Parsed file info:"
+                echo "Category: $CATEGORY"
+                echo "Title: $TITLE"
+                echo "Number: $NUMBER"
+
+                # Move file
+                if [ -f temp.md ]; then
+                  echo "Moving file to: $CATEGORY/${TITLE}.md"
+                  mkdir -p "$CATEGORY"
+                  mv temp.md "$CATEGORY/${TITLE}.md"
+                  git add "$CATEGORY/${TITLE}.md"
+                  echo "Added file: $CATEGORY/${TITLE}.md"
+
+                  # Commit each file individually
+                  echo "Committing file: $TITLE"
+                  git commit -m "feat: add $TITLE"
+                else
+                  echo "Error: temp.md not found after download"
+                fi
+              else
+                echo "Error: Invalid filename format: $FILE"
+                rm -f temp.md
+              fi
+            else
+              echo "Skipping non-markdown file: $FILE"
+            fi
+          done
+
+          # Push all commits at the end
+          echo "Pushing all commits..."
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
+          echo "Changes pushed successfully"
