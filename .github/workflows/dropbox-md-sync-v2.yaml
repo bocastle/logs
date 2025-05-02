@@ -112,14 +112,14 @@ jobs:
             exit 1
           fi
 
-          # Check if response is empty
+          # 응답이 비어있는지 확인
           if [ -z "$response_body" ]; then
             echo "No folder found for date $DATE in Dropbox"
             echo "This is normal if no files were uploaded for this date"
             exit 0
           fi
 
-          # Token expired check (error 401)
+          # 토큰 만료 확인 (401 오류)
           if [[ "$response_body" == *"error"* && "$response_body" == *"401"* ]]; then
             echo "Token expired, refreshing..."
             DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
@@ -127,7 +127,7 @@ jobs:
               exit 1
             }
 
-            # Retry the list_folder request with refreshed token
+            # 갱신된 토큰으로 list_folder 요청 다시 실행
             response_body=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
@@ -138,14 +138,14 @@ jobs:
 
           echo "Final Response body: $response_body"
 
-          # Check if the response_body contains an error about the path not existing
+          # 응답에서 폴더가 존재하지 않음을 나타내는 에러 확인
           if [[ "$response_body" == *"path/not_found"* ]]; then
             echo "No folder found for date $DATE in Dropbox"
             echo "This is normal if no files were uploaded for this date"
             exit 0
           fi
 
-          # Only process files if we have a valid response_body
+          # 유효한 응답이 있는 경우에만 파일 처리
           echo "Processing file list..."
           if ! echo "$response_body" | jq -e '.entries' >/dev/null 2>&1; then
             echo "No files found in Dropbox for date $DATE"
@@ -163,19 +163,19 @@ jobs:
           echo "Found files:"
           echo "$FILE_LIST"
 
-          # Process each file
+          # 파일을 하나씩 처리
           IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST" || true
           if [ ${#FILE_ARRAY[@]} -eq 0 ]; then
             echo "No files to process"
             exit 0
           fi
 
-          # Process files one by one
+          # 파일 처리
           for FILE in "${FILE_ARRAY[@]}"; do
             if [[ $FILE =~ \.md$ ]]; then
               echo "Processing file: $FILE"
               
-              # Download file
+              # 파일 다운로드
               echo "Downloading file: $FILE"
               if ! curl -s -X POST https://content.dropboxapi.com/2/files/download \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
@@ -194,7 +194,7 @@ jobs:
                 echo "Category: $CATEGORY"
                 echo "Title: $TITLE"
 
-                # Move file
+                # 파일 이동
                 if [ -f temp.md ]; then
                   echo "Moving file to: $CATEGORY/${TITLE}.md"
                   mkdir -p "$CATEGORY"
@@ -202,9 +202,9 @@ jobs:
                   git add "$CATEGORY/${TITLE}.md"
                   echo "Added file: $CATEGORY/${TITLE}.md"
 
-                  # Commit each file individually
+                  # 각 파일을 개별적으로 커밋
                   echo "Committing file: $TITLE"
-                  git commit -m "feat: add $TITLE"
+                  git commit -m "feat: $TITLE"
                 else
                   echo "Error: temp.md not found after download"
                 fi
@@ -217,7 +217,7 @@ jobs:
             fi
           done
 
-          # Push all commits at the end
+          # 마지막에 모든 커밋을 푸시
           echo "Pushing all commits..."
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
           echo "Changes pushed successfully"
