@@ -78,12 +78,12 @@ jobs:
             fi
 
             # Create base64 encoded client credentials
-            local client_credentials=$(echo -n "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET" | base64)
+            client_credentials=$(echo -n "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET" | base64)
             
             # Make the API call with proper OAuth 2.0 headers
             echo "Making API call to Dropbox..."
-            local temp_file=$(mktemp)
-            local response=$(curl -s -w -X POST https://api.dropbox.com/oauth2/token \
+            temp_file=$(mktemp)
+            response=$(curl -v -X POST https://api.dropbox.com/oauth2/token \
               -H "Authorization: Basic $client_credentials" \
               -H "Content-Type: application/x-www-form-urlencoded" \
               -d "grant_type=refresh_token" \
@@ -91,8 +91,8 @@ jobs:
               -w "\n%{http_code}" \
               -o "$temp_file" 2>&1)
             
-            local http_code=$(echo "$response" | tail -n1)
-            local response_body=$(cat "$temp_file")
+            http_code=$(echo "$response" | tail -n1)
+            response_body=$(cat "$temp_file")
             rm "$temp_file"
             
             echo "HTTP Status Code: $http_code"
@@ -112,8 +112,8 @@ jobs:
               return 1
             fi
             
-            local token=$(echo "$response_body" | jq -r '.access_token')
-            local error=$(echo "$response_body" | jq -r '.error')
+            token=$(echo "$response_body" | jq -r '.access_token')
+            error=$(echo "$response_body" | jq -r '.error')
             
             if [ "$token" == "null" ] || [ -z "$token" ]; then
               echo "Error: Failed to refresh access token"
@@ -136,15 +136,15 @@ jobs:
           # Function to list files with retry
           list_files() {
             echo "Listing files from Dropbox... $DATE"
-            local temp_file=$(mktemp)
-            local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            temp_file=$(mktemp)
+            response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}")
 
             echo "API Response!!!!!!!!: $response"
-            local http_code=$(echo "$response" | tail -n1)
-            local response_body=$(cat "$temp_file")
+            http_code=$(echo "$response" | tail -n1)
+            response_body=$(cat "$temp_file")
             rm "$temp_file"
 
             if [ "$http_code" != "200" ]; then
@@ -152,7 +152,7 @@ jobs:
               echo "Response Body: $response_body"
 
               # Check for error_summary
-              local error_summary=$(echo "$response_body" | jq -r '.error_summary // empty')
+              error_summary=$(echo "$response_body" | jq -r '.error_summary // empty')
               if [ -n "$error_summary" ]; then
                 echo "Error Summary: $error_summary"
               fi
