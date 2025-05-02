@@ -1,0 +1,102 @@
+# 워크플로우 이름 정의
+name: Sync Markdown from Dropbox
+
+# 워크플로우 실행 조건 설정
+on:
+  # 매일 한국시간 오후 9시에 실행
+  # UTC 12:00 = KST 21:00 (UTC+9)
+  schedule:
+    - cron: "0 12 * * *"
+  # 수동으로도 실행 가능하도록 설정
+  workflow_dispatch:
+
+# 작업 정의
+jobs:
+  sync-md-file:
+    # Ubuntu 최신 버전에서 실행
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 저장소 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # 2. Git 설정
+      - name: Set up Git config
+        run: |
+          echo "Setting up Git config..."
+          git config --global user.name "${{ secrets.GIT_USER_NAME }}"
+          git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
+          echo "Git config setup completed"
+
+      # 3. 오늘 날짜 계산 (YYYY_MM_DD 형식)
+      - name: Calculate today's date
+        id: time
+        run: |
+          echo "Calculating today's date..."
+          # Set timezone to Asia/Seoul
+          export TZ='Asia/Seoul'
+          # Get current date in YYYY_MM_DD format
+          TODAY=$(date +'%Y_%m_%d')
+          echo "Current timezone: $TZ"
+          echo "Calculated date: $TODAY"
+          # Set the date in GitHub environment
+          echo "DATE=$TODAY" >> $GITHUB_ENV
+          # Verify the date was set correctly
+          echo "Date set to: $TODAY"
+          # Double check the date
+          if [ "$TODAY" != "$(date +'%Y_%m_%d')" ]; then
+            echo "Error: Date mismatch. Expected $TODAY but got $(date +'%Y_%m_%d')"
+            exit 1
+          fi
+
+      # 4. 토큰 갱신
+      - name: Get Dropbox Access Token
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+        run: |
+          # Access token 얻는 코드...
+          get_access_token() {
+            echo "Attempting to get access token..."
+            client_credentials=$(echo -n "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET" | base64)
+            temp_file=$(mktemp)
+            response=$(curl -v -X POST https://api.dropbox.com/oauth2/token \
+              -H "Authorization: Basic $client_credentials" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "grant_type=refresh_token" \
+              -d "refresh_token=$DROPBOX_REFRESH_TOKEN" \
+              -w "\n%{http_code}" \
+              -o "$temp_file" 2>&1)
+            
+            http_code=$(echo "$response" | tail -n1)
+            response_body=$(cat "$temp_file")
+            rm "$temp_file"
+
+            # HTTP 코드 확인
+            if [ "$http_code" != "200" ]; then
+              echo "Error: HTTP request failed with status $http_code"
+              exit 1
+            fi
+            
+            # JSON 응답 확인
+            token=$(echo "$response_body" | jq -r '.access_token')
+            if [ -z "$token" ]; then
+              echo "Error: Failed to get access token"
+              exit 1
+            fi
+            
+            echo "Access token obtained successfully"
+            echo "$token"
+          }
+
+          # 토큰을 얻어 환경변수에 설정
+          DROPBOX_ACCESS_TOKEN=$(get_access_token) || exit 1
+
+          # 토큰 확인을 위한 출력
+          echo "Access token is: $DROPBOX_ACCESS_TOKEN"
+      # 토큰 확인
+      - name: Set DROPBOX_ACCESS_TOKEN environment variable
+        run: |
+          echo "DROPBOX_ACCESS_TOKEN=$DROPBOX_ACCESS_TOKEN" >> $GITHUB_ENV
