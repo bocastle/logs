@@ -137,7 +137,7 @@ jobs:
           list_files() {
             echo "Listing files from Dropbox..."
             local temp_file=$(mktemp)
-            local response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
+            local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}")
