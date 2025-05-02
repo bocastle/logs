@@ -170,6 +170,9 @@ jobs:
             
             echo "$response_body"
           }
+          # 확인
+          echo "Raw response: $response"
+          echo "Response body: $response_body"
 
           # Get file list
           echo "Getting file list..."
