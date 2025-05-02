@@ -138,12 +138,12 @@ jobs:
             echo "Listing files from Dropbox... $DATE"
 
             temp_file=$(mktemp)
-            response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            response=$(curl -v -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
-              --data '{"path": ""}')
+              --data '{"path": ""}' 2>&1)
 
-            echo "API Response!!!!!!!!: $response"
+            echo "response!!!!!!!!!!!!!!!!!!!!!::::::::::::::: $response"
             http_code=$(echo "$response" | tail -n1)
             response_body=$(cat "$temp_file")
             rm "$temp_file"
