@@ -139,7 +139,7 @@ jobs:
 
             temp_file=$(mktemp)
             response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
-              --header "Authorization: Bearer DROPBOX_ACCESS_TOKEN" \
+              --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{"path": ""}")
 
