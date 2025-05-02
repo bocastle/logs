@@ -107,60 +107,58 @@ jobs:
           echo "HTTP status: $http_code"
           echo "Dropbox response: $response_body"
 
-          # HTTP 코드가 200이 아닌 경우
-          if [ "$http_code" != "200" ]; then
-            # 409 오류 처리: 충돌 발생시
-            if [[ "$http_code" == "409" ]]; then
-              echo "Error: HTTP 409 - Conflict while listing Dropbox folder"
-              echo "This may be due to a conflict in the request (e.g., folder already exists or other issues)."
-              exit 1
-            fi
+          # 409 오류 처리: 충돌 발생시
+          if [[ "$http_code" == "409" ]]; then
+            echo "Error: HTTP 409 - Conflict while listing Dropbox folder"
+            echo "This may be due to a conflict in the request (e.g., folder already exists or other issues)."
             
-            # 404 오류 처리: 폴더가 없을 경우 (path_not_found)
-            if [[ "$response_body" == *"path/not_found"* ]]; then
-              echo "Error: Folder not found for the path $DATE in Dropbox"
-              echo "This is normal if no files were uploaded for this date."
-              exit 0
-            fi
-            
-            echo "Failed to list Dropbox folder: HTTP $http_code"
-            exit 1
-          fi
-
-          # 응답이 비어있는지 확인
-          if [ -z "$response_body" ]; then
-            echo "No folder found for date $DATE in Dropbox"
-            echo "This is normal if no files were uploaded for this date"
-            exit 0
-          fi
-
-          # 토큰 만료 확인 (401 오류)
-          if [[ "$response_body" == *"error"* && "$response_body" == *"401"* ]]; then
-            echo "Token expired, refreshing..."
-            DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
-              echo "Error: Failed to refresh token during file listing"
-              exit 1
-            }
-
-            # 갱신된 토큰으로 list_folder 요청 다시 실행
-            response_body=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
+            # 폴더가 없으면 생성 시도
+            echo "Attempting to create the folder $DATE in Dropbox..."
+            response=$(curl -s -w "%{http_code}" -X POST https://api.dropboxapi.com/2/files/create_folder_v2 \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}")
 
-            echo "API Response after token refresh: $response_body"
+            create_folder_code=$(echo "$response" | tail -n1)
+            create_folder_response=$(echo "$response" | head -n -1)
+
+            if [ "$create_folder_code" == "200" ]; then
+              echo "Folder $DATE created successfully!"
+            else
+              echo "Error: Failed to create folder $DATE"
+              echo "Response: $create_folder_response"
+              exit 1
+            fi
+            # 폴더 생성 후 다시 파일 목록 요청
+            echo "Retrying to list files from Dropbox..."
+            response=$(curl -s -w "\n%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
+              --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "{\"path\": \"/$DATE\"}" \
+              -o "$temp_file")
+
+            http_code=$(echo "$response" | tail -n1)
+            response_body=$(cat "$temp_file")
+            rm "$temp_file"
+            
+            echo "HTTP status after retry: $http_code"
+            echo "Dropbox response after retry: $response_body"
+
+            # 재시도 후에도 200이 아닌 경우 종료
+            if [ "$http_code" != "200" ]; then
+              echo "Failed to list Dropbox folder after retry: HTTP $http_code"
+              exit 1
+            fi
           fi
 
-          echo "Final Response body: $response_body"
-
-          # 응답에서 폴더가 존재하지 않음을 나타내는 에러 확인
+          # 404 오류 처리: path/not_found 에러
           if [[ "$response_body" == *"path/not_found"* ]]; then
-            echo "No folder found for date $DATE in Dropbox"
-            echo "This is normal if no files were uploaded for this date"
+            echo "Error: Folder not found for the path $DATE in Dropbox"
+            echo "This is normal if no files were uploaded for this date."
             exit 0
           fi
 
-          # 유효한 응답이 있는 경우에만 파일 처리
+          # 정상적으로 파일 목록을 받은 경우
           echo "Processing file list..."
           if ! echo "$response_body" | jq -e '.entries' >/dev/null 2>&1; then
             echo "No files found in Dropbox for date $DATE"
