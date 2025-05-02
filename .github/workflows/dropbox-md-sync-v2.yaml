@@ -107,7 +107,14 @@ jobs:
           echo "HTTP status: $http_code"
           echo "Dropbox response: $response_body"
 
+          # 응답이 200이 아니면 오류 처리
           if [ "$http_code" != "200" ]; then
+            # 409 오류 처리: 충돌이 발생한 경우
+            if [[ "$http_code" == "409" ]]; then
+              echo "Error: HTTP 409 - Conflict while listing Dropbox folder"
+              echo "This may be due to a conflict in the request (e.g., folder already exists)."
+              exit 1
+            fi
             echo "Failed to list Dropbox folder: HTTP $http_code"
             exit 1
           fi
