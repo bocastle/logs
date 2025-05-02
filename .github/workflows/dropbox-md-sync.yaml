@@ -136,15 +136,14 @@ jobs:
           # Function to list files with retry
           list_files() {
             echo "Listing files from Dropbox... $DATE"
-            echo "Access Token: ${#DROPBOX_ACCESS_TOKEN} characters"
-            
+
             temp_file=$(mktemp)
-            response=$(curl -v -X POST https://api.dropboxapi.com/2/files/list_folder \
+            response_body=$(curl -v -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data '{"path": ""}' 2>&1)
 
-            echo "response!!!!!!!!!!!!!!!!!!!!!::::::::::::::: $response"
+            echo "response!!!!!!!!!!!!!!!!!!!!!::::::::::::::: $response_body"
             http_code=$(echo "$response" | tail -n1)
             response_body=$(cat "$temp_file")
             rm "$temp_file"
@@ -162,12 +161,12 @@ jobs:
                 echo "Error: Failed to refresh token during file listing"
                 exit 1
               }
-              response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
+              response_body=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data '{"path": ""}')
 
-              echo "API Response: $response"
+              echo "API Response: $response_body"
               response_body=$(cat "$temp_file")
               rm "$temp_file"
             fi
