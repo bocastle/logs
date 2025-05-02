@@ -135,14 +135,14 @@ jobs:
 
           # Function to list files with retry
           list_files() {
-            echo "Listing files from Dropbox..."
+            echo "Listing files from Dropbox... $DATE"
             local temp_file=$(mktemp)
             local response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/$DATE\"}")
 
-            echo "API Response!!!!!!!!: $response"
+            echo "API Response!!!!!!!!: $response" | jq .
             local http_code=$(echo "$response" | tail -n1)
             local response_body=$(cat "$temp_file")
             rm "$temp_file"
