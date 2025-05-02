@@ -143,11 +143,22 @@ jobs:
               --data "{\"path\": \"/2025_05_02\"}" \ \
               -o "$temp_file" 2>&1)
 
-            echo "temp_file: $temp_file"
-            echo "Response: $response"
-            echo "Response body: $response_body"
+            local http_code=$(echo "$response" | tail -n1)
             local response_body=$(cat "$temp_file")
             rm "$temp_file"
+
+            if [ "$http_code" != "200" ]; then
+              echo "Error: Failed to list files. HTTP Status Code: $http_code"
+              echo "Response Body: $response_body"
+
+              # Check for error_summary
+              local error_summary=$(echo "$response_body" | jq -r '.error_summary // empty')
+              if [ -n "$error_summary" ]; then
+                echo "Error Summary: $error_summary"
+              fi
+
+              exit 1
+            fi
             
             # Check if response is empty
             if [ -z "$response_body" ]; then
@@ -177,11 +188,6 @@ jobs:
             
             echo "Response body:$response_body"
           }
-          # 확인
-          echo "Access Token: $DROPBOX_ACCESS_TOKEN"
-          echo "Date: $DATE"
-
-
 
           # Get file list
           echo "Getting file list..."
