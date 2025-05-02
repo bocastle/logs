@@ -92,10 +92,10 @@ jobs:
              echo "$token"
            }
 
-            # 토큰 받아서 곧바로 환경 변수로 저장
-            token=$(get_access_token)
-            echo "Access token: $token"  # 디버깅용
+             # 토큰 받아서 환경 변수로 저장 (줄바꿈 제거)
+            token=$(get_access_token | tr -d '\r\n')
             echo "DROPBOX_ACCESS_TOKEN=$token" >> $GITHUB_ENV
+            echo "Access token safely stored in GITHUB_ENV"
 
       # 토큰 확인
       - name: Set DROPBOX_ACCESS_TOKEN environment variable
