@@ -159,7 +159,7 @@ jobs:
                 echo "Error: Failed to refresh token during file listing"
                 exit 1
               }
-              response=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
+              response=$(curl -w -X POST https://api.dropboxapi.com/2/files/list_folder \
                 --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
                 --header "Content-Type: application/json" \
                 --data "{\"path\": \"\"}" \
