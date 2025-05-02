@@ -185,16 +185,14 @@ jobs:
                 continue
               fi
               
-              # Parse filename (more robust approach)
-              if [[ $FILE =~ ^([^_]+)_([^_]+)_([0-9]+)\.md$ ]]; then
+              # 수정된 정규 표현식 (숫자 없이 카테고리와 제목만 파싱)
+              if [[ $FILE =~ ^([^_]+)_([^_]+)\.md$ ]]; then
                 CATEGORY="${BASH_REMATCH[1]}"
                 TITLE="${BASH_REMATCH[2]}"
-                NUMBER="${BASH_REMATCH[3]}"
                 
                 echo "Parsed file info:"
                 echo "Category: $CATEGORY"
                 echo "Title: $TITLE"
-                echo "Number: $NUMBER"
 
                 # Move file
                 if [ -f temp.md ]; then
