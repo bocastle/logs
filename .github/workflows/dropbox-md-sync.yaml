@@ -171,6 +171,8 @@ jobs:
             echo "$response_body"
           }
           # 확인
+          echo "Access Token: $DROPBOX_ACCESS_TOKEN"
+          echo "Date: $DATE"
           echo "Raw response: $response"
           echo "Response body: $response_body"
 
