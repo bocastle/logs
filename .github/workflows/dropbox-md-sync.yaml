@@ -95,8 +95,7 @@ jobs:
             response_body=$(cat "$temp_file")
             rm "$temp_file"
             
-            echo "HTTP Status Code: $http_code"
-            echo "Response Body: $response_body"
+
             
             # Check HTTP status code
             if [ "$http_code" != "200" ]; then
@@ -137,30 +136,18 @@ jobs:
           # Function to list files with retry
           list_files() {
             echo "Listing files from Dropbox... $DATE"
+            echo "Listing files from Dropbox... $token"
             temp_file=$(mktemp)
             response=$(curl -s -X POST https://api.dropboxapi.com/2/files/list_folder \
               --header "Authorization: Bearer $token" \
               --header "Content-Type: application/json" \
-              --data "{\"path\": \"/$DATE\"}")
+              --data "{\"path\": \""}")
 
             echo "API Response!!!!!!!!: $response"
             http_code=$(echo "$response" | tail -n1)
             response_body=$(cat "$temp_file")
             rm "$temp_file"
 
-            if [ "$http_code" != "200" ]; then
-              echo "Error: Failed to list files. HTTP Status Code: $http_code"
-              echo "Response Body: $response_body"
-
-              # Check for error_summary
-              error_summary=$(echo "$response_body" | jq -r '.error_summary // empty')
-              if [ -n "$error_summary" ]; then
-                echo "Error Summary: $error_summary"
-              fi
-
-              exit 1
-            fi
-            
             # Check if response is empty
             if [ -z "$response_body" ]; then
               echo "No folder found for date $DATE in Dropbox"
