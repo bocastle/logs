@@ -57,48 +57,37 @@ jobs:
           DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
           DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
         run: |
-          # 토큰 얻는 함수 정의
-           get_access_token() {
-             echo "Attempting to get access token..."
-             client_credentials=$(echo -n "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET" | base64)
-             temp_file=$(mktemp)
-             response=$(curl -v -X POST https://api.dropbox.com/oauth2/token \
-               -H "Authorization: Basic $client_credentials" \
-               -H "Content-Type: application/x-www-form-urlencoded" \
-               -d "grant_type=refresh_token" \
-               -d "refresh_token=$DROPBOX_REFRESH_TOKEN" \
-               -w "\n%{http_code}" \
-               -o "$temp_file" 2>&1)
-             
-             http_code=$(echo "$response" | tail -n1)
-             response_body=$(cat "$temp_file")
-             rm "$temp_file"
+          echo "Requesting Dropbox access token..."
+          client_credentials=$(echo -n "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET" | base64)
 
-             # HTTP 코드 확인
-             if [ "$http_code" != "200" ]; then
-               echo "Error: HTTP request failed with status $http_code"
-               exit 1
-             fi
-             
-             # JSON 응답 확인
-             token=$(echo "$response_body" | jq -r '.access_token')
-             if [ -z "$token" ]; then
-               echo "Error: Failed to get access token"
-               exit 1
-             fi
-             
-             
-             echo "Access token obtained successfully: $token"  # 토큰 출력 확인
-             echo "$token"
-           }
+          temp_file=$(mktemp)
+          http_code=$(curl -s -w "%{http_code}" -X POST https://api.dropbox.com/oauth2/token \
+            -H "Authorization: Basic $client_credentials" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=refresh_token" \
+            -d "refresh_token=$DROPBOX_REFRESH_TOKEN" \
+            -o "$temp_file")
 
-             # 토큰 받아서 환경 변수로 저장 (줄바꿈 제거)
-            token=$(get_access_token | tr -d '\r\n')
-            echo "DROPBOX_ACCESS_TOKEN=$token" >> $GITHUB_ENV
-            echo "Access token safely stored in GITHUB_ENV"
+          response_body=$(cat "$temp_file")
+          rm "$temp_file"
+
+          if [ "$http_code" != "200" ]; then
+            echo "Error: Failed to get token. HTTP $http_code"
+            echo "Response body: $response_body"
+            exit 1
+          fi
+
+          token=$(echo "$response_body" | jq -r '.access_token')
+          if [ -z "$token" ]; then
+            echo "Error: access_token is empty"
+            exit 1
+          fi
+
+          echo "Access token obtained: [REDACTED]"
+          echo "DROPBOX_ACCESS_TOKEN=$token" >> $GITHUB_ENV
 
       # 토큰 확인
-      - name: Set DROPBOX_ACCESS_TOKEN environment variable
+      - name: Use Dropbox Access Token to List Files
         run: |
           echo "DROPBOX_ACCESS_TOKEN=$DROPBOX_ACCESS_TOKEN"
           echo "Listing files from Dropbox... $DATE"
