@@ -142,7 +142,10 @@ jobs:
               --header "Content-Type: application/json" \
               --data "{\"path\": \"/2025_05_02\"}" \ \
               -o "$temp_file" 2>&1)
-            
+
+            echo "temp_file: $temp_file"
+            echo "Response: $response"
+            echo "Response body: $response_body"
             local response_body=$(cat "$temp_file")
             rm "$temp_file"
             
@@ -164,6 +167,10 @@ jobs:
                 --header "Content-Type: application/json" \
                 --data "{\"path\": \"/2025_05_02\"}" \
                 -o "$temp_file" 2>&1)
+
+              echo "temp_file: $temp_file"
+              echo "Response: $response"
+              echo "Response body: $response_body"
               response_body=$(cat "$temp_file")
               rm "$temp_file"
             fi
@@ -173,7 +180,7 @@ jobs:
           # 확인
           echo "Access Token: $DROPBOX_ACCESS_TOKEN"
           echo "Date: $DATE"
-          echo "Response body: $response_body"
+
 
 
           # Get file list
