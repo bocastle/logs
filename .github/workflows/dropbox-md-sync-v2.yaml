@@ -3,10 +3,10 @@ name: Sync Markdown from Dropbox V2
 
 # 워크플로우 실행 조건 설정
 on:
-  # 매일 한국시간 오후 9시에 실행
-  # UTC 12:00 = KST 21:00 (UTC+9)
+  # 매일 한국시간 오전 11시에 실행
+  # UTC 2:00 = KST 11:00 (UTC+9)
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "0 2 * * *"
   # 수동으로도 실행 가능하도록 설정
   workflow_dispatch:
 
