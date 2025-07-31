@@ -1,0 +1,203 @@
+# 워크플로우 이름 정의
+# 드롭박스 배치
+name: Sync Markdown from Dropbox V2
+
+# 워크플로우 실행 조건 설정
+on:
+  # 매일 한국시간 오전 11시에 실행
+  # UTC 2:00 = KST 11:00 (UTC+9)
+  schedule:
+    - cron: "0 2 * * *"
+  # 수동으로도 실행 가능하도록 설정
+  workflow_dispatch:
+
+# 작업 정의
+jobs:
+  sync-md-file:
+    # Ubuntu 최신 버전에서 실행
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 저장소 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # 2. Git 설정
+      - name: Set up Git config
+        run: |
+          echo "Setting up Git config..."
+          git config --global user.name "${{ secrets.GIT_USER_NAME }}"
+          git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
+          echo "Git config setup completed"
+
+      # 3. 오늘 날짜 계산 (YYYY_MM_DD 형식)
+      - name: Calculate today's date
+        id: time
+        run: |
+          echo "Calculating today's date..."
+          # Set timezone to Asia/Seoul
+          export TZ='Asia/Seoul'
+          # Get current date in YYYY_MM_DD format
+          TODAY=$(date +'%Y_%m_%d')
+          echo "Current timezone: $TZ"
+          echo "Calculated date: $TODAY"
+          # Set the date in GitHub environment
+          echo "DATE=$TODAY" >> $GITHUB_ENV
+          # Verify the date was set correctly
+          echo "Date set to: $TODAY"
+          # Double check the date
+          if [ "$TODAY" != "$(date +'%Y_%m_%d')" ]; then
+            echo "Error: Date mismatch. Expected $TODAY but got $(date +'%Y_%m_%d')"
+            exit 1
+          fi
+
+      # 4. 토큰 갱신
+      - name: Get Dropbox Access Token
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+        run: |
+          echo "Requesting Dropbox access token..."
+          client_credentials=$(echo -n "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET" | base64)
+
+          temp_file=$(mktemp)
+          http_code=$(curl -s -w "%{http_code}" -X POST https://api.dropbox.com/oauth2/token \
+            -H "Authorization: Basic $client_credentials" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=refresh_token" \
+            -d "refresh_token=$DROPBOX_REFRESH_TOKEN" \
+            -o "$temp_file")
+
+          response_body=$(cat "$temp_file")
+          rm "$temp_file"
+
+          if [ "$http_code" != "200" ]; then
+            echo "Error: Failed to get token. HTTP $http_code"
+            echo "Response body: $response_body"
+            exit 1
+          fi
+
+          token=$(echo "$response_body" | jq -r '.access_token')
+          if [ -z "$token" ]; then
+            echo "Error: access_token is empty"
+            exit 1
+          fi
+
+          echo "Access token obtained: [REDACTED]"
+          echo "DROPBOX_ACCESS_TOKEN=$token" >> $GITHUB_ENV
+
+      # 토큰 확인
+      - name: Use Dropbox Access Token to List Files
+        run: |
+          echo "DROPBOX_ACCESS_TOKEN=$DROPBOX_ACCESS_TOKEN"
+          echo "Listing files from Dropbox... $DATE"
+
+          # Dropbox에서 파일 목록 조회
+          temp_file=$(mktemp)
+          response=$(curl -s -w "\n%{http_code}" -X POST https://api.dropboxapi.com/2/files/list_folder \
+            --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data "{\"path\": \"/$DATE\"}" \
+            -o "$temp_file")
+
+          http_code=$(echo "$response" | tail -n1)
+          response_body=$(cat "$temp_file")
+          rm "$temp_file"
+
+          echo "HTTP status: $http_code"
+          echo "Dropbox response: $response_body"
+
+          # 409 오류 처리: 충돌 발생시
+          if [[ "$http_code" == "409" ]]; then
+            echo "Error: HTTP 409 - Conflict while listing Dropbox folder"
+            echo "This may be due to a conflict in the request (e.g., folder already exists or other issues)."
+            
+            # 폴더가 없으면 그냥 종료
+            echo "No folder found for date $DATE in Dropbox. Exiting workflow."
+            exit 0
+          fi
+
+          # 404 오류 처리: path/not_found 에러
+          if [[ "$response_body" == *"path/not_found"* ]]; then
+            echo "Error: Folder not found for the path $DATE in Dropbox"
+            echo "This is normal if no files were uploaded for this date."
+            exit 0
+          fi
+
+          # 정상적으로 파일 목록을 받은 경우
+          echo "Processing file list..."
+          if ! echo "$response_body" | jq -e '.entries' >/dev/null 2>&1; then
+            echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          FILE_LIST=$(echo "$response_body" | jq -r '.entries[].name')
+          if [ -z "$FILE_LIST" ]; then
+            echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          echo "Found files:"
+          echo "$FILE_LIST"
+
+          # 파일을 하나씩 처리
+          IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST" || true
+          if [ ${#FILE_ARRAY[@]} -eq 0 ]; then
+            echo "No files to process"
+            exit 0
+          fi
+
+          # 파일 처리
+          for FILE in "${FILE_ARRAY[@]}"; do
+            if [[ $FILE =~ \.md$ ]]; then
+              echo "Processing file: $FILE"
+              
+              # 파일 다운로드
+              echo "Downloading file: $FILE"
+              if ! curl -s -X POST https://content.dropboxapi.com/2/files/download \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
+                --output temp.md; then
+                echo "Error: Failed to download file: $FILE"
+                continue
+              fi
+              
+              # 수정된 정규 표현식 (숫자 없이 카테고리와 제목만 파싱)
+              if [[ $FILE =~ ^([^_]+)_([^_]+)\.md$ ]]; then
+                CATEGORY="${BASH_REMATCH[1]}"
+                TITLE="${BASH_REMATCH[2]}"
+                
+                echo "Parsed file info:"
+                echo "Category: $CATEGORY"
+                echo "Title: $TITLE"
+
+                # 파일 이동
+                if [ -f temp.md ]; then
+                  echo "Moving file to: $CATEGORY/${TITLE}.md"
+                  mkdir -p "$CATEGORY"
+                  mv temp.md "$CATEGORY/${TITLE}.md"
+                  git add "$CATEGORY/${TITLE}.md"
+                  echo "Added file: $CATEGORY/${TITLE}.md"
+
+                  # 각 파일을 개별적으로 커밋
+                  echo "Committing file: $TITLE"
+                  git commit -m "feat: $TITLE"
+                else
+                  echo "Error: temp.md not found after download"
+                fi
+              else
+                echo "Error: Invalid filename format: $FILE"
+                rm -f temp.md
+              fi
+            else
+              echo "Skipping non-markdown file: $FILE"
+            fi
+          done
+
+          # 마지막에 모든 커밋을 푸시
+          echo "Pushing all commits..."
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
+          echo "Changes pushed successfully"

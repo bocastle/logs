@@ -1,0 +1,276 @@
+# 워크플로우 이름 정의
+name: Sync Markdown from Dropbox
+
+# 워크플로우 실행 조건 설정
+on:
+  # 매일 한국시간 오후 9시에 실행
+  # UTC 12:00 = KST 21:00 (UTC+9)
+  schedule:
+    - cron: "0 12 * * *"
+  # 수동으로도 실행 가능하도록 설정
+  workflow_dispatch:
+
+# 작업 정의
+jobs:
+  sync-md-file:
+    # Ubuntu 최신 버전에서 실행
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 저장소 체크아웃
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # 2. Git 설정
+      - name: Set up Git config
+        run: |
+          echo "Setting up Git config..."
+          git config --global user.name "${{ secrets.GIT_USER_NAME }}"
+          git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
+          echo "Git config setup completed"
+
+      # 3. 오늘 날짜 계산 (YYYY_MM_DD 형식)
+      - name: Calculate today's date
+        id: time
+        run: |
+          echo "Calculating today's date..."
+          # Set timezone to Asia/Seoul
+          export TZ='Asia/Seoul'
+          # Get current date in YYYY_MM_DD format
+          TODAY=$(date +'%Y_%m_%d')
+          echo "Current timezone: $TZ"
+          echo "Calculated date: $TODAY"
+          # Set the date in GitHub environment
+          echo "DATE=$TODAY" >> $GITHUB_ENV
+          # Verify the date was set correctly
+          echo "Date set to: $TODAY"
+          # Double check the date
+          if [ "$TODAY" != "$(date +'%Y_%m_%d')" ]; then
+            echo "Error: Date mismatch. Expected $TODAY but got $(date +'%Y_%m_%d')"
+            exit 1
+          fi
+
+      # 4. Dropbox에서 마크다운 파일 다운로드
+      - name: Get Dropbox Access Token and Sync Files
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          DATE: ${{ env.DATE }}
+        run: |
+          set -e  # Exit immediately if a command exits with a non-zero status
+          set -x  # Print commands and their arguments as they are executed
+
+          echo "Starting Dropbox sync process..."
+          echo "Using date: $DATE"
+
+          # Function to get access token
+          get_access_token() {
+            echo "Attempting to get access token..."
+            
+            # Check if required environment variables are set
+            if [ -z "$DROPBOX_APP_KEY" ] || [ -z "$DROPBOX_APP_SECRET" ] || [ -z "$DROPBOX_REFRESH_TOKEN" ]; then
+              echo "Error: Missing required environment variables"
+              echo "DROPBOX_APP_KEY is set: $([ ! -z "$DROPBOX_APP_KEY" ] && echo "Yes" || echo "No")"
+              echo "DROPBOX_APP_SECRET is set: $([ ! -z "$DROPBOX_APP_SECRET" ] && echo "Yes" || echo "No")"
+              echo "DROPBOX_REFRESH_TOKEN is set: $([ ! -z "$DROPBOX_REFRESH_TOKEN" ] && echo "Yes" || echo "No")"
+              return 1
+            fi
+
+            # Create base64 encoded client credentials
+            client_credentials=$(echo -n "$DROPBOX_APP_KEY:$DROPBOX_APP_SECRET" | base64)
+            
+            # Make the API call with proper OAuth 2.0 headers
+            echo "Making API call to Dropbox..."
+            temp_file=$(mktemp)
+            response=$(curl -v -X POST https://api.dropbox.com/oauth2/token \
+              -H "Authorization: Basic $client_credentials" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "grant_type=refresh_token" \
+              -d "refresh_token=$DROPBOX_REFRESH_TOKEN" \
+              -w "\n%{http_code}" \
+              -o "$temp_file" 2>&1)
+            
+            http_code=$(echo "$response" | tail -n1)
+            response_body=$(cat "$temp_file")
+            rm "$temp_file"
+            
+
+            
+            # Check HTTP status code
+            if [ "$http_code" != "200" ]; then
+              echo "Error: HTTP request failed with status $http_code"
+              echo "Full response: $response"
+              return 1
+            fi
+            
+            # Check if response is valid JSON
+            if ! echo "$response_body" | jq . >/dev/null 2>&1; then
+              echo "Error: Invalid JSON response from Dropbox API"
+              echo "Raw response: $response_body"
+              return 1
+            fi
+            
+            token=$(echo "$response_body" | jq -r '.access_token')
+            error=$(echo "$response_body" | jq -r '.error')
+            
+            if [ "$token" == "null" ] || [ -z "$token" ]; then
+              echo "Error: Failed to refresh access token"
+              echo "Error message: $error"
+              echo "Full response: $response_body"
+              return 1
+            fi
+            
+            echo "Access token obtained successfully"
+            echo "$token"
+          }
+
+          # Get initial access token
+          echo "Getting initial access token..."
+          DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
+            echo "Error: Failed to get initial access token"
+            exit 1
+          }
+
+
+          # Function to list files with retry
+          list_files() {
+            echo "Listing files from Dropbox... $DATE"
+
+            temp_file=$(mktemp)
+            response_body=$(curl -v -X POST https://api.dropboxapi.com/2/files/list_folder \
+              --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "{\"path\": \"/$DATE\"}")
+
+            echo "response!!!!!!!!!!!!!!!!!!!!!::::::::::::::: $response_body"
+            http_code=$(echo "$response" | tail -n1)
+            response_body=$(cat "$temp_file")
+            rm "$temp_file"
+
+            # Check if response is empty
+            if [ -z "$response_body" ]; then
+              echo "No folder found for date $DATE in Dropbox"
+              echo "This is normal if no files were uploaded for this date"
+              exit 0
+            fi
+            
+            if [[ "$response_body" == *"error"* && "$response_body" == *"401"* ]]; then
+              echo "Token expired, refreshing..."
+              DROPBOX_ACCESS_TOKEN=$(get_access_token) || {
+                echo "Error: Failed to refresh token during file listing"
+                exit 1
+              }
+              response_body=$(curl -s -v -X POST https://api.dropboxapi.com/2/files/list_folder \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "{\"path\": \"/$DATE\"}")
+
+              echo "API Response: $response_body"
+              response_body=$(cat "$temp_file")
+              rm "$temp_file"
+            fi
+            
+            echo "Response body:$response_body"
+          }
+
+          # Get file list
+          echo "Getting file list..."
+          response=$(list_files)
+          if [ $? -ne 0 ]; then
+            echo "Error: Failed to list files"
+            echo "Response: $response"
+            exit 1
+          fi
+
+          # Check if response is empty
+          if [ -z "$response" ]; then
+            echo "No folder found for date $DATE in Dropbox"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          # Check if the response contains an error about the path not existing
+          if [[ "$response" == *"path/not_found"* ]]; then
+            echo "No folder found for date $DATE in Dropbox"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          # Only process files if we have a valid response
+          echo "Processing file list..."
+          if ! echo "$response" | jq -e '.entries' >/dev/null 2>&1; then
+            echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          FILE_LIST=$(echo "$response" | jq -r '.entries[].name')
+          if [ -z "$FILE_LIST" ]; then
+            echo "No files found in Dropbox for date $DATE"
+            echo "This is normal if no files were uploaded for this date"
+            exit 0
+          fi
+
+          echo "Found files:"
+          echo "$FILE_LIST"
+
+          # Process each file
+          IFS=$'\n' read -rd '' -a FILE_ARRAY <<< "$FILE_LIST" || true
+          if [ ${#FILE_ARRAY[@]} -eq 0 ]; then
+            echo "No files to process"
+            exit 0
+          fi
+
+          for FILE in "${FILE_ARRAY[@]}"; do
+            if [[ $FILE =~ \.md$ ]]; then
+              echo "Processing file: $FILE"
+              
+              # Download file
+              echo "Downloading file: $FILE"
+              if ! curl -s -X POST https://content.dropboxapi.com/2/files/download \
+                --header "Authorization: Bearer $DROPBOX_ACCESS_TOKEN" \
+                --header "Dropbox-API-Arg: {\"path\": \"/$DATE/$FILE\"}" \
+                --output temp.md; then
+                echo "Error: Failed to download file: $FILE"
+                continue
+              fi
+              
+              # Parse filename (more robust approach)
+              if [[ $FILE =~ ^([^_]+)_([^_]+)_([0-9]+)\.md$ ]]; then
+                CATEGORY="${BASH_REMATCH[1]}"
+                TITLE="${BASH_REMATCH[2]}"
+                NUMBER="${BASH_REMATCH[3]}"
+                
+                echo "Parsed file info:"
+                echo "Category: $CATEGORY"
+                echo "Title: $TITLE"
+                echo "Number: $NUMBER"
+
+                # Move file
+                if [ -f temp.md ]; then
+                  echo "Moving file to: $CATEGORY/${TITLE}.md"
+                  mkdir -p "$CATEGORY"
+                  mv temp.md "$CATEGORY/${TITLE}.md"
+                  git add "$CATEGORY/${TITLE}.md"
+                  echo "Added file: $CATEGORY/${TITLE}.md"
+                  
+                  # Commit each file individually
+                  echo "Committing file: $TITLE"
+                  git commit -m "feat: ${TITLE}"
+                else
+                  echo "Error: temp.md not found after download"
+                fi
+              else
+                echo "Error: Invalid filename format: $FILE"
+                rm -f temp.md
+              fi
+            else
+              echo "Skipping non-markdown file: $FILE"
+            fi
+          done
+
+          # Push all commits at the end
+          echo "Pushing all commits..."
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
+          echo "Changes pushed successfully"
