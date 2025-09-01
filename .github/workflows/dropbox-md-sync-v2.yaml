@@ -89,6 +89,7 @@ jobs:
 
       # 토큰 확인
       - name: Use Dropbox Access Token to List Files
+        id: sync_files
         run: |
           echo "DROPBOX_ACCESS_TOKEN=$DROPBOX_ACCESS_TOKEN"
           echo "Listing files from Dropbox... $DATE"
@@ -135,6 +136,7 @@ jobs:
 
           FILE_LIST=$(echo "$response_body" | jq -r '.entries[].name')
           if [ -z "$FILE_LIST" ]; then
+            echo "msg=동기화 성공했지만 Dropbox에 $DATE 날짜의 파일이 없습니다." >> $GITHUB_OUTPUT
             echo "No files found in Dropbox for date $DATE"
             echo "This is normal if no files were uploaded for this date"
             exit 0
@@ -196,19 +198,11 @@ jobs:
               echo "Skipping non-markdown file: $FILE"
             fi
           done
-
+          echo "msg=Dropbox → GitHub 동기화 성공 (파일 ${#FILE_ARRAY[@]}개 처리됨)" >> $GITHUB_OUTPUT
           # 마지막에 모든 커밋을 푸시
           echo "Pushing all commits..."
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
           echo "Changes pushed successfully"
-      - name: Set email message
-        id: setmsg
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "msg=✅ Dropbox → GitHub 동기화 성공했습니다." >> $GITHUB_OUTPUT
-          else
-            echo "msg=❌ Dropbox → GitHub 동기화 실패했습니다. 로그를 확인하세요." >> $GITHUB_OUTPUT
-          fi
       - name: Send mail
         if: always()
         uses: dawidd6/action-send-mail@v3
@@ -220,4 +214,4 @@ jobs:
           subject: "[Dropbox Sync] ${{ job.status }}"
           to: ${{secrets.SMTP_USER}}
           from: "GitHub Action <${{ secrets.SMTP_USER }}>"
-          body: ${{ steps.setmsg.outputs.msg }}
+          body: ${{ steps.sync_files.outputs.msg }}
