@@ -201,3 +201,23 @@ jobs:
           echo "Pushing all commits..."
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
           echo "Changes pushed successfully"
+      - name: Set email message
+        id: setmsg
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "msg=✅ Dropbox → GitHub 동기화 성공했습니다." >> $GITHUB_OUTPUT
+          else
+            echo "msg=❌ Dropbox → GitHub 동기화 실패했습니다. 로그를 확인하세요." >> $GITHUB_OUTPUT
+          fi
+      - name: Send mail
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: "[Dropbox Sync] ${{ job.status }}"
+          to: ${{secrets.SMTP_USER}}
+          from: "GitHub Action <${{ secrets.SMTP_USER }}>"
+          body: ${{ steps.setmsg.outputs.msg }}
