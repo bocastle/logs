@@ -19,6 +19,6 @@ jobs:
           username: ${{ secrets.SMTP_USER }}
           password: ${{ secrets.SMTP_PASS }}
           subject: GitHub Action 결과
-          to: target@example.com
+          to: ${{ secrets.SMTP_USER }}
           from: "GitHub Action <${{ secrets.SMTP_USER }}>"
           body: 워크플로우가 실패했습니다. 로그를 확인하세요.
