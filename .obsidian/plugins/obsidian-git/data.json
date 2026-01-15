@@ -1,7 +1,7 @@
 {
   "commitMessage": "log backup: {{date}}",
   "commitDateFormat": "YYYY-MM-DD HH:mm:ss",
-  "autoSaveInterval": 10,
+  "autoSaveInterval": 0,
   "autoPushInterval": 15,
   "autoPullInterval": 10,
   "autoPullOnBoot": false,
