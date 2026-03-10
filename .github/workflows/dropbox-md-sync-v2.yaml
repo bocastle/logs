@@ -201,7 +201,8 @@ jobs:
           echo "msg=Dropbox → GitHub 동기화 성공 (파일 ${#FILE_ARRAY[@]}개 처리됨)" >> $GITHUB_OUTPUT
           # 마지막에 모든 커밋을 푸시
           echo "Pushing all commits..."
-          git pull https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main --rebase
+          # 에러나면 해당 코드 살려서 pull 이후 push
+          # git pull https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main --rebase
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
           echo "Changes pushed successfully"
       - name: Send mail
