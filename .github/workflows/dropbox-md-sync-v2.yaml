@@ -218,6 +218,30 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Send Telegram
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_STATUS: ${{ job.status }}
+          SYNC_MESSAGE: ${{ steps.sync_files.outputs.msg }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram secrets are not configured. Skipping Telegram notification."
+            exit 0
+          fi
+
+          TEXT="[Dropbox Sync] ${JOB_STATUS}
+
+          Date: ${DATE}
+          ${SYNC_MESSAGE:-No sync message}
+
+          Run: ${RUN_URL}"
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${TEXT}"
       - name: Send mail
         if: always()
         uses: dawidd6/action-send-mail@v3
