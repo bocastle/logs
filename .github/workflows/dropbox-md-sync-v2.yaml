@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: dropbox-md-sync
+  cancel-in-progress: false
+
 # 작업 정의
 jobs:
   sync-md-file:
@@ -211,9 +215,9 @@ jobs:
             echo "No commits to push."
           else
             echo "Pushing all commits..."
-            # 에러나면 해당 코드 살려서 pull 이후 push
-            # git pull https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main --rebase
-            git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
+            REMOTE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git"
+            git pull "$REMOTE_URL" main --rebase
+            git push "$REMOTE_URL" HEAD:main
             echo "Changes pushed successfully"
           fi
         env:
