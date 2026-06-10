@@ -11,6 +11,9 @@ on:
   # 수동으로도 실행 가능하도록 설정
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 # 작업 정의
 jobs:
   sync-md-file:
@@ -184,9 +187,13 @@ jobs:
                   git add "$CATEGORY/${TITLE}.md"
                   echo "Added file: $CATEGORY/${TITLE}.md"
 
-                  # 각 파일을 개별적으로 커밋
-                  echo "Committing file: $TITLE"
-                  git commit -m "feat: $TITLE"
+                  if git diff --cached --quiet; then
+                    echo "No changes for file: $CATEGORY/${TITLE}.md. Skipping commit."
+                  else
+                    # 각 파일을 개별적으로 커밋
+                    echo "Committing file: $TITLE"
+                    git commit -m "feat: $TITLE"
+                  fi
                 else
                   echo "Error: temp.md not found after download"
                 fi
@@ -200,11 +207,17 @@ jobs:
           done
           echo "msg=Dropbox → GitHub 동기화 성공 (파일 ${#FILE_ARRAY[@]}개 처리됨)" >> $GITHUB_OUTPUT
           # 마지막에 모든 커밋을 푸시
-          echo "Pushing all commits..."
-          # 에러나면 해당 코드 살려서 pull 이후 push
-          # git pull https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main --rebase
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
-          echo "Changes pushed successfully"
+          if git diff --quiet origin/main..HEAD; then
+            echo "No commits to push."
+          else
+            echo "Pushing all commits..."
+            # 에러나면 해당 코드 살려서 pull 이후 push
+            # git pull https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main --rebase
+            git push https://x-access-token:${GITHUB_TOKEN}@github.com/bocastle/logs.git main
+            echo "Changes pushed successfully"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Send mail
         if: always()
         uses: dawidd6/action-send-mail@v3
